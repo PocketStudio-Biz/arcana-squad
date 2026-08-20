@@ -8,7 +8,8 @@
   },
   "scripts": {
     "dev": "vite dev --host 0.0.0.0 --port 8080",
-    "build": "vite build && npm run db:migrate",
+    "build": "vite build && npm run db:migrate && npm run pglite:copy",
+    "pglite:copy": "node -e \"import fs from 'fs'; import path from 'path'; const dest='.vercel/output/functions/__server.func/_libs'; const src='node_modules/@electric-sql/pglite/dist'; fs.mkdirSync(dest,{recursive:true}); for (const f of ['pglite.data','pglite.wasm']) { const a=path.join(src,f); if (fs.existsSync(a)) fs.copyFileSync(a, path.join(dest,f)); }\"",
     "db:migrate": "node scripts/migrate.mjs",
     "build:dev": "vite build --mode development",
     "preview": "vite preview",
