@@ -176,7 +176,35 @@ async function createSql(): Promise<Sql> {
         "or a server route loader, never from client code.",
     );
   }
-  return dbSource === "neon" ? createNeonSql() : createPgliteSql();
+  if (dbSource === "neon") return createNeonSql();
+  try {
+    return await createPgliteSql();
+  } catch (err) {
+    console.error("[db] PGLite unavailable, scores will stay local:", err);
+    return memorySql();
+  }
+}
+
+function memorySql(): Sql {
+  const rows: Record<string, unknown>[] = [];
+  return toSql(async <T>(text: string, params: unknown[]) => {
+    const q = text.toLowerCase();
+    if (q.includes("insert into scores")) {
+      rows.push({
+        id: rows.length + 1,
+        display_name: params[1],
+        score: params[2],
+        rooms: params[3],
+        hero_id: params[4],
+        created_at: new Date().toISOString(),
+      });
+      return [] as T[];
+    }
+    if (q.includes("from scores")) {
+      return [...rows].sort((a, b) => Number(b.score) - Number(a.score)).slice(0, 20) as T[];
+    }
+    return [] as T[];
+  });
 }
 
 /**
@@ -233,6 +261,5 @@ if (typeof window === "undefined" && dbSource === "pglite") {
   globalBoot.__pgBootstrapPromise__ ??= ensureDbReady().catch((err) => {
     globalBoot.__pgBootstrapPromise__ = undefined;
     console.error("[db] PGLite bootstrap failed:", err);
-    throw err;
   });
 }
