@@ -1,6 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { lazy, Suspense } from "react";
 import "@/game/arcana-opening";
+import "@/game/squad-behavior";
 
 const GameApp = lazy(() => import("@/game/GameApp").then((m) => ({ default: m.GameApp })));
 
