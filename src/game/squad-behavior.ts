@@ -18,6 +18,7 @@ type RuntimeState = ArcanaGame & {
   pz: number;
   t: number;
   heroId: HeroId;
+  reduced: boolean;
   float: (text: string, color: string, x: number, z: number) => void;
 };
 
@@ -61,16 +62,19 @@ if (!proto[PATCH_FLAG]) {
       const count = squad.allies.length;
       for (let i = 0; i < count; i += 1) {
         const ally = squad.allies[i]!;
-        const phase = runtime.t * 0.72 + (i / count) * Math.PI * 2;
-        const practicePulse = Math.max(0, Math.sin(runtime.t * 1.35 + i * 1.8));
+        const phase = runtime.reduced
+          ? (i / count) * Math.PI * 2
+          : runtime.t * 0.72 + (i / count) * Math.PI * 2;
+        const practicePulse = runtime.reduced ? 0 : Math.max(0, Math.sin(runtime.t * 1.35 + i * 1.8));
         const radius = 1.75 + practicePulse * 0.32;
         const x = runtime.px + Math.sin(phase) * radius;
         const z = runtime.pz + Math.cos(phase) * radius;
-        ally.position.set(x, 0.05 + Math.abs(Math.sin(runtime.t * 3 + i)) * 0.08, z);
+        const lift = runtime.reduced ? 0.05 : 0.05 + Math.abs(Math.sin(runtime.t * 3 + i)) * 0.08;
+        ally.position.set(x, lift, z);
         ally.rotation.y = Math.atan2(runtime.px - x, runtime.pz - z);
 
         const bob = ally.userData.bob as THREE.Object3D | undefined;
-        if (bob) bob.position.y = Math.abs(Math.sin(runtime.t * 5 + i * 0.9)) * 0.045;
+        if (bob) bob.position.y = runtime.reduced ? 0 : Math.abs(Math.sin(runtime.t * 5 + i * 0.9)) * 0.045;
       }
     }
 
