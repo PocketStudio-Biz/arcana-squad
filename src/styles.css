@@ -45,6 +45,17 @@
     -webkit-text-size-adjust: 100%;
   }
 
+  html[data-arcana-larger-text="true"] {
+    font-size: 112.5%;
+  }
+
+  html[data-arcana-high-contrast="true"] {
+    --color-muted: #c9c0b2;
+    --color-faint: #b1a798;
+    --color-line: #6e5b3b;
+    --color-gold-dim: #c6a944;
+  }
+
   html,
   body {
     overflow: hidden;
@@ -90,6 +101,14 @@
     background: var(--color-ink);
     box-shadow: 0 0 0 1px color-mix(in srgb, var(--color-gold) 18%, transparent), 0 10px 22px rgba(0, 0, 0, 0.45);
   }
+}
+
+html[data-arcana-reduced-effects="true"] *,
+html[data-arcana-reduced-effects="true"] *::before,
+html[data-arcana-reduced-effects="true"] *::after {
+  animation-duration: 0.01ms !important;
+  animation-iteration-count: 1 !important;
+  transition-duration: 0.01ms !important;
 }
 
 @media (prefers-reduced-motion: reduce) {
