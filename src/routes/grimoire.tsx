@@ -2,20 +2,68 @@ import { createFileRoute, Link } from "@tanstack/react-router";
 import { useEffect, useMemo, useState } from "react";
 import { ArcanaSiteShell, PageIntro } from "@/components/arcana/ArcanaSiteShell";
 import { GUARDIANS } from "@/lib/arcana";
-import { ARCANA_BY_ID } from "@/lib/arcana-cards";
-import { getGrimoire, type GrimoireState } from "@/lib/progression";
+import { ARCANA_BY_ID, ARCANA_DECK } from "@/lib/arcana-cards";
+import {
+  getGrimoire,
+  saveDailyDraw,
+  unlockArcanaCard,
+  type GrimoireState,
+} from "@/lib/progression";
+import {
+  saveAccessibilityPreferences,
+  type ArcanaAccessibility,
+} from "@/lib/accessibility";
 
 export const Route = createFileRoute("/grimoire")({ component: PlayerGrimoire });
+
+const DEFAULT_ACCESSIBILITY: ArcanaAccessibility = {
+  reducedEffects: false,
+  largerText: false,
+  highContrast: false,
+};
+
+function localDateKey(date = new Date()) {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
+function normalizeAccessibility(value: Record<string, unknown> | undefined): ArcanaAccessibility {
+  return {
+    reducedEffects: Boolean(value?.reducedEffects),
+    largerText: Boolean(value?.largerText),
+    highContrast: Boolean(value?.highContrast),
+  };
+}
+
+function applyAccessibility(value: ArcanaAccessibility) {
+  const root = document.documentElement;
+  root.dataset.arcanaReducedEffects = String(value.reducedEffects);
+  root.dataset.arcanaLargerText = String(value.largerText);
+  root.dataset.arcanaHighContrast = String(value.highContrast);
+  try {
+    localStorage.setItem("arcana-squad-accessibility", JSON.stringify(value));
+  } catch {
+    // Local persistence is optional; authenticated server persistence remains authoritative.
+  }
+}
 
 function PlayerGrimoire() {
   const [state, setState] = useState<GrimoireState | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [busy, setBusy] = useState<string | null>(null);
+  const [prefs, setPrefs] = useState<ArcanaAccessibility>(DEFAULT_ACCESSIBILITY);
 
   useEffect(() => {
     let live = true;
     void getGrimoire()
       .then((next) => {
-        if (live) setState(next);
+        if (!live) return;
+        setState(next);
+        const saved = normalizeAccessibility(next.profile.accessibility);
+        setPrefs(saved);
+        applyAccessibility(saved);
       })
       .catch((err: unknown) => {
         if (live) setError(err instanceof Error ? err.message : "The Grimoire could not be opened.");
@@ -30,6 +78,67 @@ function PlayerGrimoire() {
     [state],
   );
 
+  const today = localDateKey();
+  const alreadyDrewToday = state?.profile.daily_draw_date === today;
+
+  const drawDailyCard = async () => {
+    if (!state || alreadyDrewToday || busy) return;
+    setBusy("daily");
+    setError(null);
+    const card = ARCANA_DECK[Math.floor(Math.random() * ARCANA_DECK.length)]!;
+    try {
+      await saveDailyDraw({ data: { cardId: card.id, date: today } });
+      await unlockArcanaCard({ data: { cardId: card.id } });
+      try {
+        localStorage.setItem("arcana-squad-daily-draw", JSON.stringify({ date: today, cardId: card.id }));
+      } catch {
+        // The account save already succeeded; local storage only helps the next run start instantly.
+      }
+      setState((current) =>
+        current
+          ? {
+              ...current,
+              profile: {
+                ...current.profile,
+                daily_draw_date: today,
+                daily_draw_card_id: card.id,
+              },
+              unlockedCards: current.unlockedCards.includes(card.id)
+                ? current.unlockedCards
+                : [...current.unlockedCards, card.id],
+            }
+          : current,
+      );
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "The Daily Draw could not be saved.");
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  const togglePreference = async (key: keyof ArcanaAccessibility) => {
+    if (busy) return;
+    const next = { ...prefs, [key]: !prefs[key] };
+    setPrefs(next);
+    applyAccessibility(next);
+    setBusy(`accessibility-${key}`);
+    try {
+      await saveAccessibilityPreferences({ data: next });
+      setState((current) =>
+        current
+          ? {
+              ...current,
+              profile: { ...current.profile, accessibility: next },
+            }
+          : current,
+      );
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Accessibility preferences could not be saved.");
+    } finally {
+      setBusy(null);
+    }
+  };
+
   return (
     <ArcanaSiteShell>
       <section className="mx-auto max-w-6xl px-5 py-12 sm:px-8 sm:py-16">
@@ -42,11 +151,13 @@ function PlayerGrimoire() {
 
         {error && (
           <div role="status" className="mt-8 rounded-xl border border-gold-dim bg-panel p-5 text-sm leading-6 text-muted">
-            <p className="font-display text-gold">The Grimoire is sealed.</p>
+            <p className="font-display text-gold">Grimoire notice</p>
             <p className="mt-2">{error}</p>
-            <Link to="/login" className="mt-4 inline-flex rounded-lg bg-gold px-3 py-2 font-display text-xs text-void">
-              Sign in
-            </Link>
+            {!state && (
+              <Link to="/login" className="mt-4 inline-flex min-h-11 items-center rounded-lg bg-gold px-3 py-2 font-display text-xs text-void">
+                Sign in
+              </Link>
+            )}
           </div>
         )}
 
@@ -113,23 +224,38 @@ function PlayerGrimoire() {
                       );
                     })}
                   </div>
-                  <Link to="/cards" className="mt-4 inline-flex rounded-lg border border-line px-3 py-2 text-sm text-parchment">
+                  <Link to="/cards" className="mt-4 inline-flex min-h-11 items-center rounded-lg border border-line px-3 py-2 text-sm text-parchment">
                     Open Card Archive
                   </Link>
                 </section>
 
                 <section className="arcana-card p-5">
-                  <p className="font-display text-xs tracking-[0.22em] text-gold">DAILY DRAW</p>
-                  {state.profile.daily_draw_card_id ? (
-                    <>
-                      <p className="mt-3 font-display text-lg text-parchment">
-                        {ARCANA_BY_ID[state.profile.daily_draw_card_id]?.name ?? state.profile.daily_draw_card_id}
-                      </p>
-                      <p className="mt-1 text-xs text-muted">Drawn {state.profile.daily_draw_date}</p>
-                    </>
-                  ) : (
-                    <p className="mt-3 text-sm leading-6 text-muted">No Daily Draw has been saved yet.</p>
-                  )}
+                  <div className="flex items-start justify-between gap-4">
+                    <div>
+                      <p className="font-display text-xs tracking-[0.22em] text-gold">DAILY DRAW</p>
+                      {state.profile.daily_draw_card_id ? (
+                        <>
+                          <p className="mt-3 font-display text-lg text-parchment">
+                            {ARCANA_BY_ID[state.profile.daily_draw_card_id]?.name ?? state.profile.daily_draw_card_id}
+                          </p>
+                          <p className="mt-1 text-xs text-muted">Drawn {state.profile.daily_draw_date}</p>
+                        </>
+                      ) : (
+                        <p className="mt-3 text-sm leading-6 text-muted">No Daily Draw has been saved yet.</p>
+                      )}
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => void drawDailyCard()}
+                      disabled={alreadyDrewToday || busy === "daily"}
+                      className="min-h-11 shrink-0 rounded-lg bg-gold px-3 py-2 font-display text-xs text-void disabled:cursor-not-allowed disabled:opacity-50"
+                    >
+                      {alreadyDrewToday ? "Drawn today" : busy === "daily" ? "Drawing…" : "Draw card"}
+                    </button>
+                  </div>
+                  <p className="mt-4 text-xs leading-5 text-faint">
+                    Today’s card is also offered to the next run as its opening Arcana modifier.
+                  </p>
                 </section>
 
                 <section className="arcana-card p-5">
@@ -140,16 +266,35 @@ function PlayerGrimoire() {
 
                 <section className="arcana-card p-5">
                   <p className="font-display text-xs tracking-[0.22em] text-gold">ACCESSIBILITY</p>
-                  <p className="mt-3 text-sm leading-6 text-muted">
-                    Reduced-motion support is respected globally. Persisted accessibility preferences are available
-                    in the profile store for the next settings pass.
-                  </p>
+                  <div className="mt-4 grid gap-2">
+                    {([
+                      ["reducedEffects", "Reduced effects", "Reduce shake and companion motion."],
+                      ["largerText", "Larger text", "Increase interface text sizing across the website."],
+                      ["highContrast", "Higher contrast", "Brighten muted text and interface boundaries."],
+                    ] as const).map(([key, label, description]) => (
+                      <button
+                        key={key}
+                        type="button"
+                        aria-pressed={prefs[key]}
+                        onClick={() => void togglePreference(key)}
+                        className="flex min-h-14 items-center justify-between gap-4 rounded-xl border border-line bg-panel px-4 py-3 text-left"
+                      >
+                        <span>
+                          <span className="block text-sm font-semibold text-parchment">{label}</span>
+                          <span className="mt-1 block text-xs text-muted">{description}</span>
+                        </span>
+                        <span className={`rounded-full px-2 py-1 text-[10px] font-semibold uppercase tracking-wider ${prefs[key] ? "bg-gold text-void" : "bg-raised text-muted"}`}>
+                          {prefs[key] ? "On" : "Off"}
+                        </span>
+                      </button>
+                    ))}
+                  </div>
                 </section>
               </div>
             </div>
 
             <div className="mt-8 flex justify-end">
-              <Link to="/play" className="rounded-xl bg-gold px-5 py-3 font-display text-sm text-void">Continue to Play</Link>
+              <Link to="/play" className="inline-flex min-h-11 items-center rounded-xl bg-gold px-5 py-3 font-display text-sm text-void">Continue to Play</Link>
             </div>
           </>
         )}
