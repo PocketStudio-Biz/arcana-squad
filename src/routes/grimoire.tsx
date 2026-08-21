@@ -6,6 +6,7 @@ import { ARCANA_BY_ID, ARCANA_DECK } from "@/lib/arcana-cards";
 import {
   getGrimoire,
   saveDailyDraw,
+  saveDeck,
   unlockArcanaCard,
   type GrimoireState,
 } from "@/lib/progression";
@@ -54,6 +55,7 @@ function PlayerGrimoire() {
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
   const [prefs, setPrefs] = useState<ArcanaAccessibility>(DEFAULT_ACCESSIBILITY);
+  const [deckIds, setDeckIds] = useState<string[]>([]);
 
   useEffect(() => {
     let live = true;
@@ -61,6 +63,7 @@ function PlayerGrimoire() {
       .then((next) => {
         if (!live) return;
         setState(next);
+        setDeckIds([...next.deck].sort((a, b) => a.slot - b.slot).map((entry) => entry.card_id));
         const saved = normalizeAccessibility(next.profile.accessibility);
         setPrefs(saved);
         applyAccessibility(saved);
@@ -75,6 +78,11 @@ function PlayerGrimoire() {
 
   const progressByGuardian = useMemo(
     () => new Map(state?.guardians.map((row) => [row.guardian_id, row]) ?? []),
+    [state],
+  );
+
+  const discoveredCards = useMemo(
+    () => (state?.unlockedCards ?? []).map((id) => ARCANA_BY_ID[id]).filter(Boolean),
     [state],
   );
 
@@ -111,6 +119,35 @@ function PlayerGrimoire() {
       );
     } catch (err) {
       setError(err instanceof Error ? err.message : "The Daily Draw could not be saved.");
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  const toggleDeckCard = (cardId: string) => {
+    setDeckIds((current) => {
+      if (current.includes(cardId)) return current.filter((id) => id !== cardId);
+      if (current.length >= 12) return current;
+      return [...current, cardId];
+    });
+  };
+
+  const persistDeck = async () => {
+    if (!state || busy) return;
+    setBusy("deck");
+    setError(null);
+    try {
+      await saveDeck({ data: { cardIds: deckIds } });
+      setState((current) =>
+        current
+          ? {
+              ...current,
+              deck: deckIds.map((cardId, index) => ({ slot: index + 1, card_id: cardId })),
+            }
+          : current,
+      );
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "The deck could not be saved.");
     } finally {
       setBusy(null);
     }
@@ -184,7 +221,7 @@ function PlayerGrimoire() {
                   {GUARDIANS.map((guardian) => {
                     const progress = progressByGuardian.get(guardian.id);
                     const xp = progress?.xp ?? 0;
-                    const pct = Math.min(100, Math.round((xp / 1000) * 100));
+                    const pct = Math.min(100, Math.round((xp / 1500) * 100));
                     return (
                       <div key={guardian.id} className="rounded-xl border border-line bg-panel p-4">
                         <div className="flex items-center justify-between gap-3">
@@ -199,7 +236,7 @@ function PlayerGrimoire() {
                         <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-raised" aria-label={`${xp} guardian experience`}>
                           <div className="h-full bg-gold" style={{ width: `${pct}%` }} />
                         </div>
-                        <p className="mt-2 text-xs text-faint">{xp.toLocaleString()} XP</p>
+                        <p className="mt-2 text-xs text-faint">{xp.toLocaleString()} XP · Digivolve at 1,500</p>
                       </div>
                     );
                   })}
@@ -209,21 +246,64 @@ function PlayerGrimoire() {
               <div className="grid gap-4">
                 <section className="arcana-card p-5">
                   <div className="flex items-center justify-between gap-3">
-                    <p className="font-display text-xs tracking-[0.22em] text-gold">DECK & COLLECTION</p>
-                    <span className="text-xs text-muted">{state.unlockedCards.length} discovered</span>
+                    <div>
+                      <p className="font-display text-xs tracking-[0.22em] text-gold">DECK & COLLECTION</p>
+                      <p className="mt-1 text-xs text-muted">{state.unlockedCards.length} discovered · {deckIds.length}/12 equipped</p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => void persistDeck()}
+                      disabled={busy === "deck"}
+                      className="min-h-11 rounded-lg bg-gold px-3 py-2 font-display text-xs text-void disabled:opacity-50"
+                    >
+                      {busy === "deck" ? "Saving…" : "Save deck"}
+                    </button>
                   </div>
+
                   <div className="mt-4 grid grid-cols-3 gap-2 sm:grid-cols-4">
                     {Array.from({ length: 12 }, (_, index) => {
-                      const slot = state.deck.find((entry) => entry.slot === index + 1);
-                      const card = slot ? ARCANA_BY_ID[slot.card_id] : undefined;
+                      const id = deckIds[index];
+                      const card = id ? ARCANA_BY_ID[id] : undefined;
                       return (
-                        <div key={index} className="min-h-20 rounded-lg border border-line bg-raised p-2 text-xs">
+                        <button
+                          key={index}
+                          type="button"
+                          disabled={!id}
+                          onClick={() => id && toggleDeckCard(id)}
+                          className="min-h-20 rounded-lg border border-line bg-raised p-2 text-left text-xs disabled:cursor-default"
+                          aria-label={id ? `Remove ${card?.name ?? id} from deck` : `Empty deck slot ${index + 1}`}
+                        >
                           <span className="text-faint">{index + 1}</span>
-                          <p className="mt-2 leading-4 text-parchment">{card?.name ?? (slot?.card_id || "Empty")}</p>
-                        </div>
+                          <p className="mt-2 leading-4 text-parchment">{card?.name ?? "Empty"}</p>
+                        </button>
                       );
                     })}
                   </div>
+
+                  <div className="mt-4 max-h-64 overflow-y-auto rounded-xl border border-line bg-panel p-3">
+                    <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-muted">Discovered cards</p>
+                    {discoveredCards.length ? (
+                      <div className="grid gap-2 sm:grid-cols-2">
+                        {discoveredCards.map((card) => {
+                          const selected = deckIds.includes(card.id);
+                          return (
+                            <button
+                              key={card.id}
+                              type="button"
+                              aria-pressed={selected}
+                              onClick={() => toggleDeckCard(card.id)}
+                              className={`min-h-11 rounded-lg border px-3 py-2 text-left text-xs ${selected ? "border-gold bg-raised text-gold" : "border-line text-parchment"}`}
+                            >
+                              {card.name}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    ) : (
+                      <p className="text-sm text-muted">Complete a Daily Draw or start a run to discover your first Arcana card.</p>
+                    )}
+                  </div>
+
                   <Link to="/cards" className="mt-4 inline-flex min-h-11 items-center rounded-lg border border-line px-3 py-2 text-sm text-parchment">
                     Open Card Archive
                   </Link>
@@ -262,6 +342,11 @@ function PlayerGrimoire() {
                   <p className="font-display text-xs tracking-[0.22em] text-gold">QUESTS & ACHIEVEMENTS</p>
                   <p className="mt-3 text-sm text-muted">Active quest: {state.profile.active_quest ?? "None"}</p>
                   <p className="mt-1 text-sm text-muted">Achievements: {state.achievements.length}</p>
+                  {state.achievements.length > 0 && (
+                    <ul className="mt-3 grid gap-1 text-xs text-faint">
+                      {state.achievements.map((achievement) => <li key={achievement}>• {achievement}</li>)}
+                    </ul>
+                  )}
                 </section>
 
                 <section className="arcana-card p-5">
