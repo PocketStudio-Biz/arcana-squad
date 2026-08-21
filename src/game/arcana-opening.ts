@@ -16,7 +16,7 @@ type EngineInternals = ArcanaGame & {
 };
 
 const PATCH_FLAG = Symbol.for("arcana-squad.opening-card-patched");
-const proto = ArcanaGame.prototype as ArcanaGame["constructor"]["prototype"] & Record<PropertyKey, unknown>;
+const proto = ArcanaGame.prototype as unknown as Record<PropertyKey, unknown>;
 
 if (!proto[PATCH_FLAG]) {
   proto[PATCH_FLAG] = true;
