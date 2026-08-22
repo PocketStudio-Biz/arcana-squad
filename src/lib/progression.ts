@@ -1,6 +1,7 @@
 import { createServerFn } from "@tanstack/react-start";
 import { getSql } from "@/lib/db";
 import type { GuardianId } from "@/lib/arcana";
+import type { ArcanaAccessibility } from "@/lib/accessibility";
 
 export type GuardianProgressRow = {
   guardian_id: GuardianId;
@@ -15,7 +16,7 @@ export type GrimoireState = {
     active_quest: string | null;
     daily_draw_date: string | null;
     daily_draw_card_id: string | null;
-    accessibility: Record<string, unknown>;
+    accessibility: Partial<ArcanaAccessibility>;
   };
   unlockedCards: string[];
   deck: Array<{ slot: number; card_id: string }>;

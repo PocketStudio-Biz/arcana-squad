@@ -11,7 +11,7 @@ type RuntimePrototype = {
   victory: (this: ArcanaGame) => void;
 };
 
-type RuntimeState = ArcanaGame & {
+type RuntimeState = {
   heroId: HeroId;
   room: number;
   score: number;

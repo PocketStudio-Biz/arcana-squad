@@ -12,7 +12,7 @@ type RuntimePrototype = {
   hurtPlayer: (this: ArcanaGame, dmg: number) => void;
 };
 
-type RuntimeState = ArcanaGame & {
+type RuntimeState = {
   scene: THREE.Scene;
   px: number;
   pz: number;

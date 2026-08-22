@@ -13,7 +13,7 @@ declare global {
   }
 }
 
-type EngineInternals = ArcanaGame & {
+type EngineInternals = {
   applyPower: (id: PowerId) => void;
   pushHud: () => void;
   float: (text: string, color: string, x: number, z: number) => void;
