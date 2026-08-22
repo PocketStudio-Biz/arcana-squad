@@ -21,8 +21,8 @@ jobs:
         image: postgres:16
         env:
           POSTGRES_USER: postgres
-          POSTGRES_PASSWORD: postgres
           POSTGRES_DB: arcana_ci
+          POSTGRES_HOST_AUTH_METHOD: trust
         ports:
           - 5432:5432
         options: >-
@@ -32,7 +32,7 @@ jobs:
           --health-retries 10
     env:
       CI: true
-      DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/arcana_ci
+      DATABASE_URL: postgresql://postgres@127.0.0.1:5432/arcana_ci
     steps:
       - name: Checkout
         uses: actions/checkout@v4
