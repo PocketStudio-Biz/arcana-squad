@@ -70,9 +70,10 @@
 
   .arcana-card {
     border: 1px solid var(--color-gold-dim);
-    border-radius: 6px;
+    border-radius: 8px;
     background: var(--color-ink);
-    box-shadow: 0 0 0 1px color-mix(in srgb, var(--color-gold) 18%, transparent), 0 10px 22px rgba(0, 0, 0, 0.45);
+    overflow: hidden;
+    box-shadow: 0 0 0 1px color-mix(in srgb, var(--color-gold) 22%, transparent), 0 10px 22px rgba(0, 0, 0, 0.45);
   }
 }
 

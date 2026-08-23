@@ -4,12 +4,13 @@ import { Pause, Play, Trophy, ChevronLeft } from "lucide-react";
 import { SignedIn, SignedOut, UserButton } from "@/lib/auth/gates";
 import { useCurrentUserState } from "@/lib/auth/use-current-user";
 import { getTopScores, submitScore, type ScoreRow } from "@/lib/scores";
-import { CIRCLE_HEROES, HERO_BY_ID, MAJOR_HEROES } from "./heroes";
+import { PLAYABLE_HEROES, HERO_BY_ID } from "./heroes";
 import { POWERS } from "./powerups";
-import { ArcanaGame } from "./engine";
-import type { HeroId, HeroPack, HudSnap, PowerId } from "./types";
+import { Codex } from "./Codex";
+import type { HeroId, HudSnap, PowerId } from "./types";
+import type { ArcanaGame } from "./engine";
 
-type Screen = "title" | "select" | "how" | "scores" | "play";
+type Screen = "title" | "select" | "how" | "scores" | "play" | "book";
 
 type Floaty = { id: number; text: string; color: string; x: number; y: number };
 
@@ -22,7 +23,7 @@ export function GameApp() {
   const { user, isPending } = useCurrentUserState();
 
   const [screen, setScreen] = useState<Screen>("title");
-  const [hero, setHero] = useState<HeroId>("wanderer");
+  const [hero, setHero] = useState<HeroId>("fool");
   const [hud, setHud] = useState<HudSnap | null>(null);
   const [paused, setPaused] = useState(false);
   const [picks, setPicks] = useState<PowerId[] | null>(null);
@@ -32,6 +33,7 @@ export function GameApp() {
   const [scores, setScores] = useState<ScoreRow[]>([]);
   const [submitted, setSubmitted] = useState(false);
   const [booting, setBooting] = useState(false);
+  const [bootError, setBootError] = useState<string | null>(null);
   const floatId = useRef(0);
 
   const loadScores = useCallback(() => {
@@ -65,28 +67,40 @@ export function GameApp() {
       setPaused(false);
       setSubmitted(false);
       setHud(null);
+      setBootError(null);
       setBooting(true);
       setScreen("play");
-      const canvas = canvasRef.current;
-      if (!canvas) return;
-      const game = new ArcanaGame(canvas, {
-        onHud: setHud,
-        onPick: (choices) => setPicks(choices),
-        onOver: (stats) => setOver(stats),
-        onFloat: (text, color, x, y) => {
-          const fid = ++floatId.current;
-          setFloats((f) => [...f.slice(-18), { id: fid, text, color, x, y }]);
-          window.setTimeout(() => setFloats((f) => f.filter((n) => n.id !== fid)), 700);
-        },
-      });
-      gameRef.current = game;
-      game.audio.unlock();
-      await game.boot(id);
-      if (gameRef.current !== game) {
-        game.dispose();
-        return;
+      try {
+        await new Promise<void>((r) => requestAnimationFrame(() => r()));
+        const canvas = canvasRef.current;
+        if (!canvas) throw new Error("Canvas missing");
+        const { ArcanaGame } = await import("./engine");
+        const game = new ArcanaGame(canvas, {
+          onHud: setHud,
+          onPick: (choices) => setPicks(choices),
+          onOver: (stats) => setOver(stats),
+          onFloat: (text, color, x, y) => {
+            const fid = ++floatId.current;
+            setFloats((f) => [...f.slice(-18), { id: fid, text, color, x, y }]);
+            window.setTimeout(() => setFloats((f) => f.filter((n) => n.id !== fid)), 700);
+          },
+        });
+        gameRef.current = game;
+        game.audio.unlock();
+        const timeout = new Promise<never>((_, reject) => {
+          window.setTimeout(() => reject(new Error("The temple took too long to open. Try again.")), 15000);
+        });
+        await Promise.race([game.boot(id), timeout]);
+        if (gameRef.current !== game) {
+          game.dispose();
+          return;
+        }
+        setBooting(false);
+      } catch (err) {
+        killGame();
+        setBooting(false);
+        setBootError(err instanceof Error ? err.message : "Could not open the circle");
       }
-      setBooting(false);
     },
     [killGame],
   );
@@ -228,12 +242,53 @@ export function GameApp() {
         </div>
       )}
 
+      {bootError && !booting && (
+        <div className="absolute inset-0 z-30 grid place-items-center bg-void/85 px-6 text-center">
+          <div className="max-w-sm">
+            <p className="font-display tracking-[0.28em] text-gold">THE CIRCLE STUCK</p>
+            <p className="mt-3 text-sm text-muted">{bootError}</p>
+            <div className="mt-5 flex flex-col gap-2">
+              <Btn onClick={() => void startRun(hero)}>Try again</Btn>
+              <Btn dim onClick={() => { setBootError(null); setScreen("select"); }}>
+                Choose another path
+              </Btn>
+            </div>
+          </div>
+        </div>
+      )}
+
       {picks && <PowerPick choices={picks} onPick={onPick} />}
 
       {paused && !picks && !over && (
         <Modal>
           <h2 className="font-display text-3xl text-gold">Paused</h2>
-          <p className="mt-1 text-sm text-muted">The temple waits.</p>
+          {hud && (
+            <div className="mt-4 space-y-3 text-left">
+              <div className="rounded-lg border border-line bg-ink/50 p-3">
+                <p className="text-[10px] tracking-[0.28em] text-gold-dim">YOUR PATH</p>
+                <p className="mt-1 font-display text-lg text-gold">{hud.abilityName || HERO_BY_ID[hud.heroId].name}</p>
+                <p className="mt-1 text-sm leading-relaxed text-muted">{hud.abilityBlurb}</p>
+              </div>
+              <div
+                className="rounded-lg border bg-ink/50 p-3"
+                style={{ borderColor: hud.minorCss }}
+              >
+                <p className="text-[10px] tracking-[0.28em]" style={{ color: hud.minorCss }}>
+                  {hud.minorTitle} · {hud.resonance}
+                </p>
+                <p className="mt-1 font-display text-lg text-parchment">{hud.minorSkill}</p>
+                <p className="mt-1 text-sm leading-relaxed text-muted">{hud.minorSkillBlurb}</p>
+                <p className="mt-2 text-xs text-faint">{hud.minorBlurb}</p>
+                <p className="mt-2 text-[11px] tabular-nums" style={{ color: hud.minorCss }}>
+                  {hud.minorCd <= 0.05
+                    ? "Ready"
+                    : `Cooldown ${hud.minorCd.toFixed(1)}s / ${hud.minorCdMax.toFixed(1)}s`}
+                  {" · "}
+                  Pips {Math.floor(hud.pips)}/{hud.pipsMax}
+                </p>
+              </div>
+            </div>
+          )}
           <div className="mt-6 flex flex-col gap-2">
             <Btn onClick={togglePause}>Resume</Btn>
             <Btn
@@ -298,6 +353,7 @@ export function GameApp() {
             loadScores();
             setScreen("scores");
           }}
+          onBook={() => setScreen("book")}
           isPending={isPending}
         />
       )}
@@ -308,11 +364,20 @@ export function GameApp() {
           onSelect={setHero}
           onBack={() => setScreen("title")}
           onStart={() => void startRun(hero)}
+          onBook={() => setScreen("book")}
         />
       )}
 
       {screen === "how" && <HowTo onBack={() => setScreen("title")} />}
       {screen === "scores" && <Scores scores={scores} onBack={() => setScreen("title")} />}
+      {screen === "book" && (
+        <Codex
+          selected={hero}
+          onSelect={setHero}
+          onBack={() => setScreen("title")}
+          onWalk={() => void startRun(hero)}
+        />
+      )}
 
       <style>{`
         @keyframes arcana-float {
@@ -419,11 +484,13 @@ function Title({
   onPlay,
   onHow,
   onScores,
+  onBook,
   isPending,
 }: {
   onPlay: () => void;
   onHow: () => void;
   onScores: () => void;
+  onBook: () => void;
   isPending: boolean;
 }) {
   return (
@@ -446,10 +513,10 @@ function Title({
             Arcana Squad
           </h1>
           <p className="mt-3 font-display text-xs tracking-[0.18em] text-parchment/80 sm:text-sm sm:tracking-[0.22em]">
-            TWENTY-TWO PATHS. ONE CIRCLE. THE JOURNEY FROM 0 TO XXI.
+            SIX PATHS. ONE CIRCLE. TWENTY-TWO BOSSES FROM 0 TO XXI.
           </p>
           <p className="mx-auto mt-4 max-w-md text-sm leading-relaxed text-muted">
-            Walk the First Circle or the Major Arcana. Auto-fire while you dodge, pick a blessing after every room, and push the gold jackal back into the dark.
+            Choose one of the six. Walk the story. Each room is a Major Arcana you have to put down.
           </p>
           <div className="mx-auto mt-8 flex w-full max-w-sm flex-col items-stretch gap-2.5">
             <Btn onClick={onPlay} wide>
@@ -463,6 +530,9 @@ function Title({
                 High scores
               </Btn>
             </div>
+            <Btn dim onClick={onBook} wide className="border-gold/40">
+              Character book
+            </Btn>
           </div>
         </div>
         <p className="text-center text-[11px] tracking-wide text-faint">
@@ -478,15 +548,15 @@ function Select({
   onSelect,
   onBack,
   onStart,
+  onBook,
 }: {
   selected: HeroId;
   onSelect: (id: HeroId) => void;
   onBack: () => void;
   onStart: () => void;
+  onBook: () => void;
 }) {
-  const h = HERO_BY_ID[selected];
-  const [pack, setPack] = useState<HeroPack>(h.pack);
-  const list = pack === "major" ? MAJOR_HEROES : CIRCLE_HEROES;
+  const h = HERO_BY_ID[selected] ?? PLAYABLE_HEROES[0]!;
 
   return (
     <div className="absolute inset-0 z-10 flex flex-col overflow-hidden bg-void">
@@ -496,7 +566,7 @@ function Select({
         className="relative flex min-h-0 flex-1 flex-col overflow-y-auto overscroll-contain px-3 sm:px-4"
         style={{ paddingTop: "max(1rem, env(safe-area-inset-top))" }}
       >
-        <div className="mx-auto w-full max-w-6xl pb-3">
+        <div className="mx-auto w-full max-w-5xl pb-3">
           <button
             type="button"
             onClick={onBack}
@@ -507,39 +577,11 @@ function Select({
           <h2 className="mt-1 font-display text-2xl text-gold sm:text-3xl landscape:mt-0 landscape:text-xl">
             Choose a path
           </h2>
-          <div className="mt-3 flex gap-2">
-            <button
-              type="button"
-              onClick={() => setPack("major")}
-              className={`h-11 min-h-11 flex-1 rounded-md px-3 font-display text-xs tracking-[0.14em] sm:flex-none sm:px-5 ${
-                pack === "major" ? "bg-gold text-ink" : "border border-line bg-raised text-parchment"
-              }`}
-            >
-              MAJOR ARCANA
-            </button>
-            <button
-              type="button"
-              onClick={() => setPack("circle")}
-              className={`h-11 min-h-11 flex-1 rounded-md px-3 font-display text-xs tracking-[0.14em] sm:flex-none sm:px-5 ${
-                pack === "circle" ? "bg-gold text-ink" : "border border-line bg-raised text-parchment"
-              }`}
-            >
-              THE CIRCLE
-            </button>
-          </div>
           <p className="mt-2 text-xs text-muted sm:text-sm">
-            {pack === "major"
-              ? "Twenty-two animal mages. 0 to XXI."
-              : "Eight faces of the first circle — suits, majors, and chaos."}
+            Six playable. The rest of the Major Arcana wait as story bosses.
           </p>
-          <div
-            className={`mt-3 grid gap-2.5 sm:gap-3 ${
-              pack === "major"
-                ? "grid-cols-3 sm:grid-cols-4 lg:grid-cols-6"
-                : "grid-cols-2 sm:grid-cols-4 lg:grid-cols-8"
-            }`}
-          >
-            {list.map((hero) => (
+          <div className="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6 sm:gap-3">
+            {PLAYABLE_HEROES.map((hero) => (
               <HeroCard key={hero.id} hero={hero} on={hero.id === selected} onSelect={onSelect} />
             ))}
           </div>
@@ -549,22 +591,26 @@ function Select({
         className="relative z-10 border-t border-line bg-panel/95 px-4 pt-3 landscape:pt-2"
         style={{ paddingBottom: "max(1rem, calc(env(safe-area-inset-bottom) + 0.75rem))" }}
       >
-        <div className="mx-auto flex w-full max-w-6xl flex-col gap-2 sm:flex-row sm:items-center sm:gap-4">
+        <div className="mx-auto flex w-full max-w-5xl flex-col gap-2 sm:flex-row sm:items-center sm:gap-4">
           <div className="flex min-w-0 flex-1 items-center gap-3">
             <img src={h.portrait} alt="" className="h-16 w-11 shrink-0 rounded-sm object-contain ring-1 ring-gold/40 sm:h-20 sm:w-14" />
-            <img
-              src={h.portrait.replace(/\.(jpg|png)$/, h.pack === "circle" ? "-sprite.png" : "-sprite.jpg")}
-              alt=""
-              className="h-14 w-11 shrink-0 object-contain sm:h-16"
-            />
             <div className="min-w-0">
               <p className="font-display text-[10px] tracking-[0.28em] text-gold-dim">{h.title}</p>
               <p className="font-display text-lg text-gold">{h.name}</p>
+              {h.ability && (
+                <p className="truncate font-display text-xs tracking-wide text-gold">
+                  {h.ability}
+                  <span className="ml-1 font-sans font-normal text-muted">— {h.abilityBlurb}</span>
+                </p>
+              )}
               <p className="truncate text-xs text-muted">
                 {h.animal} · {h.element} · {h.passive}
               </p>
             </div>
           </div>
+          <Btn dim onClick={onBook} className="sm:w-auto">
+            Sheet
+          </Btn>
           <Btn onClick={onStart} wide className="sm:w-auto sm:min-w-56">
             Walk as {h.name}
           </Btn>
@@ -579,7 +625,7 @@ function HeroCard({
   on,
   onSelect,
 }: {
-  hero: (typeof MAJOR_HEROES)[number];
+  hero: (typeof PLAYABLE_HEROES)[number];
   on: boolean;
   onSelect: (id: HeroId) => void;
 }) {
@@ -587,14 +633,18 @@ function HeroCard({
     <button
       type="button"
       onClick={() => onSelect(hero.id)}
-      className={`arcana-card overflow-hidden bg-ink text-left ${on ? "ring-2 ring-gold border-gold" : ""}`}
+      className={`arcana-card w-full text-left ${on ? "ring-2 ring-gold border-gold" : ""}`}
     >
-      <div className="flex aspect-[2/3] items-center justify-center bg-black">
-        <img
-          src={hero.portrait}
-          alt={hero.name}
-          className="h-full w-full object-contain"
-        />
+      <div className="relative aspect-[2/3] bg-black">
+        <div className="absolute inset-[3px] overflow-hidden rounded-[4px] bg-[#07060c]">
+          <img src={hero.portrait} alt="" className="h-full w-full object-contain object-center" />
+        </div>
+      </div>
+      <div className="flex h-12 flex-col justify-center border-t border-gold/35 bg-ink px-1.5">
+        <p className="truncate font-display text-[10px] tracking-[0.16em] text-gold sm:text-[11px]">
+          {hero.roman} · {hero.name}
+        </p>
+        <p className="truncate text-[9px] tracking-wide text-muted">{hero.ability ?? hero.element}</p>
       </div>
     </button>
   );
@@ -606,9 +656,10 @@ function HowTo({ onBack }: { onBack: () => void }) {
       <h2 className="font-display text-3xl text-gold">How to play</h2>
       <ul className="mt-4 space-y-2 text-sm leading-relaxed text-muted">
         <li>Drag anywhere on the dungeon to move. You always auto-fire at the nearest foe.</li>
-        <li>Pick a hero from the Major Arcana (0–XXI) or the First Circle of seven.</li>
-        <li>Clear the room, then pick a blessing: multi-shot, shield, speed, and stranger gifts.</li>
-        <li>Three lives. A shield charge eats a hit. Every fifth room summons the gold jackal.</li>
+        <li>Six playable: The Fool, Swords, Pentacles, Wands, Cups, The World.</li>
+        <li>Each Major Arcana boss fights with a unique pattern from their card. Learn the telegraph, then punish.</li>
+        <li>Open Character book for orthographic sheets: book HD vs in-game mesh, ability cast times, prop callouts.</li>
+        <li>Pick a blessing. Three lives. Beat The World to finish the circle.</li>
       </ul>
       <Btn onClick={onBack} className="mt-6" wide>
         Understood
@@ -694,7 +745,16 @@ function Hud({
           <p className="font-display text-xl tabular-nums tracking-widest text-parchment sm:text-2xl">
             {mm}:{ss}
           </p>
-          <p className="text-[11px] tracking-[0.25em] text-gold">Lv.{hud.room}</p>
+          <p className="text-[11px] tracking-[0.18em] text-gold">
+            {hud.bossName
+              ? `${hud.bossName}${hud.bossMove ? ` · ${hud.bossMove}` : ""}`
+              : hud.minorTitle}
+          </p>
+          {!hud.bossName && (
+            <p className="text-[9px] tracking-[0.14em] text-muted">
+              Room {hud.room} / 22 · {hud.waitBoss} waits · {hud.kills}/{hud.quota}
+            </p>
+          )}
         </div>
         <div className="min-w-14 text-right font-display text-sm tabular-nums">
           <p className="text-gold">{hud.coins} G</p>
@@ -716,9 +776,26 @@ function Hud({
           )}
           <span className="text-xs tabular-nums text-muted">×{hud.lives}</span>
         </div>
-        {hud.bossMax > 0 && (
+        {hud.bossMax > 0 ? (
           <div className="mt-1 h-2 overflow-hidden rounded-full border border-line bg-ink">
             <div className="h-full bg-gold" style={{ width: `${(hud.bossHp / hud.bossMax) * 100}%` }} />
+          </div>
+        ) : (
+          <div className="mt-1 h-2 overflow-hidden rounded-full border border-line bg-ink">
+            <div
+              className="h-full bg-gold/80"
+              style={{ width: `${Math.min(100, (hud.kills / Math.max(1, hud.quota)) * 100)}%` }}
+            />
+          </div>
+        )}
+        {hud.abilityName && (
+          <div className="mt-1 flex items-center gap-2">
+            <span className="w-[5.5rem] shrink-0 truncate text-[9px] tracking-[0.14em] text-gold-dim">
+              {hud.abilityName}
+            </span>
+            <div className="h-1.5 flex-1 overflow-hidden rounded-full border border-line bg-ink">
+              <div className="h-full bg-parchment/90" style={{ width: `${hud.abilityPct * 100}%` }} />
+            </div>
           </div>
         )}
         {ids.length > 0 && (
@@ -733,6 +810,42 @@ function Hud({
             ))}
           </div>
         )}
+      </div>
+      <div
+        className="mt-2 max-w-[11.5rem] rounded-md border bg-ink/85 p-2 shadow-lg"
+        style={{ borderColor: hud.minorCss }}
+      >
+        <div className="flex items-start justify-between gap-2">
+          <div className="min-w-0">
+            <p className="truncate text-[9px] tracking-[0.2em]" style={{ color: hud.minorCss }}>
+              {hud.minorTitle}
+            </p>
+            <p className="font-display text-sm leading-tight text-parchment">{hud.minorSkill}</p>
+          </div>
+          <span className="shrink-0 font-display text-xs tabular-nums" style={{ color: hud.minorCss }}>
+            {hud.minorCd <= 0.08 ? "RDY" : `${hud.minorCd.toFixed(1)}s`}
+          </span>
+        </div>
+        <div className="mt-1.5 h-2 overflow-hidden rounded-full border border-line bg-void">
+          <div
+            className="h-full"
+            style={{
+              width: `${Math.min(100, (1 - hud.minorCd / Math.max(0.01, hud.minorCdMax)) * 100)}%`,
+              background: hud.minorCss,
+            }}
+          />
+        </div>
+        <div className="mt-1 flex gap-0.5">
+          {Array.from({ length: Math.min(10, hud.pipsMax) }).map((_, i) => (
+            <span
+              key={i}
+              className="h-1.5 flex-1 rounded-sm"
+              style={{
+                background: i < hud.pips ? hud.minorCss : "rgba(255,255,255,0.12)",
+              }}
+            />
+          ))}
+        </div>
       </div>
     </div>
   );

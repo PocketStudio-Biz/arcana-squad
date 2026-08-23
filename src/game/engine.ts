@@ -1,11 +1,23 @@
 import * as THREE from "three";
 import type { EnemyKind, HeroId, HudSnap, PowerId } from "./types";
-import { HERO_BY_ID } from "./heroes";
+import { HERO_BY_ID, storyBoss } from "./heroes";
+import { bossHpMul, bossRange, bossSpeedMul, runBoss, type BossApi, type BossState } from "./bosses";
+import {
+  minorForRoom,
+  resonanceOf,
+  roomMods,
+  suitColor,
+  type CourtRank,
+  type MinorCard,
+  type MinorSuit,
+  type Resonance,
+  type RoomMods,
+} from "./arcana";
 import { rollChoices } from "./powerups";
 import { Input } from "./input";
 import { AudioSys } from "./audio";
 import {
-  createAnubis,
+  createBossMesh,
   createBulletMesh,
   createCoinMesh,
   createDungeon,
@@ -45,6 +57,7 @@ type Bullet = {
   homing: boolean;
   burn: boolean;
   kind: CardKind;
+  delay: number;
 };
 
 type Spark = {
@@ -62,6 +75,8 @@ type Spark = {
 type Enemy = {
   live: boolean;
   kind: EnemyKind;
+  bossId?: HeroId;
+  bossTitle?: string;
   x: number;
   z: number;
   vx: number;
@@ -77,6 +92,16 @@ type Enemy = {
   flash: number;
   burn: number;
   atk: number;
+  ai: number;
+  mode: number;
+  dashT: number;
+  dvx: number;
+  dvz: number;
+  phase: number;
+  moveName: string;
+  suit: MinorSuit;
+  court?: CourtRank;
+  slow: number;
   mesh: THREE.Group;
 };
 
@@ -151,16 +176,30 @@ export class ArcanaGame {
   private over = false;
   private ascended = false;
   private paused = false;
-  private pendingWaves: { kind: EnemyKind; n: number }[] = [];
+  private kills = 0;
+  private quota = 18;
+  private bossSpawned = false;
+  private bossDelay = 0;
   private spawnT = 0;
   private hudT = 0;
   private last = 0;
+  private abilityCd = 2;
+  private abilityMax = 6;
+  private leapT = 0;
+  private minor!: MinorCard;
+  private mods!: RoomMods;
+  private pips = 0;
+  private courtSpawned = false;
+  private resonate: Resonance = "wild";
+  private minorCd = 2;
   private running = false;
   private disposed = false;
   private t = 0;
   private reduced = false;
-  private camY = 20;
-  private camZ = 17;
+  private camY = 32;
+  private camZ = 26;
+  private cx = 0;
+  private cz = 0;
 
   constructor(
     private canvas: HTMLCanvasElement,
@@ -173,7 +212,10 @@ export class ArcanaGame {
       canvas,
       antialias: !coarse,
       alpha: false,
-      powerPreference: "high-performance",
+      powerPreference: "default",
+      failIfMajorPerformanceCaveat: false,
+      stencil: false,
+      depth: true,
     });
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, dprCap));
     this.renderer.setSize(canvas.clientWidth || 1280, canvas.clientHeight || 720, false);
@@ -184,9 +226,9 @@ export class ArcanaGame {
     this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
     this.renderer.setClearColor(0x1a1016, 1);
 
-    this.camera = new THREE.PerspectiveCamera(42, 16 / 9, 0.3, 280);
-    this.camera.position.set(0, 20, 17);
-    this.scene.fog = new THREE.FogExp2(0x221018, 0.008);
+    this.camera = new THREE.PerspectiveCamera(46, 16 / 9, 0.3, 520);
+    this.camera.position.set(0, 32, 26);
+    this.scene.fog = new THREE.FogExp2(0x221018, 0.0045);
 
     const hemi = new THREE.HemisphereLight(0xffe6d4, 0x8a3048, 1.45);
     this.scene.add(hemi);
@@ -196,11 +238,11 @@ export class ArcanaGame {
     this.dirLight.castShadow = true;
     this.dirLight.shadow.mapSize.set(map, map);
     this.dirLight.shadow.camera.near = 2;
-    this.dirLight.shadow.camera.far = 60;
-    this.dirLight.shadow.camera.left = -12;
-    this.dirLight.shadow.camera.right = 12;
-    this.dirLight.shadow.camera.top = 12;
-    this.dirLight.shadow.camera.bottom = -12;
+    this.dirLight.shadow.camera.far = 110;
+    this.dirLight.shadow.camera.left = -30;
+    this.dirLight.shadow.camera.right = 30;
+    this.dirLight.shadow.camera.top = 30;
+    this.dirLight.shadow.camera.bottom = -30;
     this.scene.add(this.dirLight);
     this.scene.add(this.dirLight.target);
     const rim = new THREE.DirectionalLight(0xd8c8ff, 0.9);
@@ -265,12 +307,12 @@ export class ArcanaGame {
     this.applyPower(id);
     this.picking = false;
     this.audio.power();
-    if (this.room >= 15) {
+    if (this.room >= 22) {
       this.victory();
       return;
     }
     this.room += 1;
-    if (this.room >= 10) this.ascendSquad();
+    if (this.room >= 11) this.ascendSquad();
     this.buildRoom(this.room);
   }
 
@@ -303,6 +345,9 @@ export class ArcanaGame {
     if (def.startShield) this.stacks.shield = 1;
     this.rebuildOrbits();
     this.playerLight.color.setHex(def.color);
+    this.abilityMax = def.abilityCd ?? 7;
+    this.abilityCd = Math.min(2.2, this.abilityMax * 0.35);
+    this.leapT = 0;
     this.lives = 3;
     this.score = 0;
     this.coinsN = 0;
@@ -313,6 +358,8 @@ export class ArcanaGame {
     this.picking = false;
     this.px = 0;
     this.pz = 0;
+    this.cx = 0;
+    this.cz = 0;
   }
 
   private buildRoom(n: number) {
@@ -325,35 +372,29 @@ export class ArcanaGame {
       this.scene.remove(e.mesh);
     }
     this.enemies = [];
-    const size = 16 + Math.min(6, Math.floor(n / 2));
+    this.kills = 0;
+    this.minor = minorForRoom(n);
+    this.mods = roomMods(this.minor);
+    this.resonate = resonanceOf(this.heroId, this.minor.suit);
+    this.pips = 0;
+    this.courtSpawned = false;
+    this.quota = Math.round((22 + n * 7) * this.mods.quotaMul);
+    this.minorCd = Math.min(2.4, this.minor.skillCd * 0.38);
+    this.bossSpawned = false;
+    this.bossDelay = 0;
+    const size = 48;
     const built = createDungeon(size, this.textures, n);
     this.dungeon = built.group;
     this.obstacles = built.obstacles;
-    this.half = built.half - 0.55;
+    this.half = built.half - 0.7;
     this.scene.add(this.dungeon);
     this.px = 0;
     this.pz = 0;
-    this.pendingWaves = this.planWaves(n);
-    this.spawnT = 0.35;
+    this.cx = 0;
+    this.cz = 0;
+    this.spawnT = 0.45;
     this.dirLight.target.position.set(0, 0, 0);
-  }
-
-  private planWaves(n: number): { kind: EnemyKind; n: number }[] {
-    if (n % 5 === 0) {
-      return [
-        { kind: "scarab", n: 3 + Math.floor(n / 5) },
-        { kind: "boss", n: 1 },
-      ];
-    }
-    const wisps = 3 + n;
-    const scarabs = Math.floor(n * 0.7);
-    const brutes = Math.max(0, Math.floor((n - 2) / 2));
-    const mages = Math.max(0, Math.floor((n - 3) / 2));
-    const waves: { kind: EnemyKind; n: number }[] = [{ kind: "wisp", n: wisps }];
-    if (scarabs) waves.push({ kind: "scarab", n: scarabs });
-    if (brutes) waves.push({ kind: "brute", n: brutes });
-    if (mages) waves.push({ kind: "mage", n: mages });
-    return waves;
+    this.dirLight.color.setHex(this.mods.color);
   }
 
   private tick = (time: number) => {
@@ -378,14 +419,24 @@ export class ArcanaGame {
     this.iFrame = Math.max(0, this.iFrame - dt);
     this.fireCd = Math.max(0, this.fireCd - dt);
     this.comboT = Math.max(0, this.comboT - dt);
+    this.leapT = Math.max(0, this.leapT - dt);
     if (this.comboT <= 0) this.combo = 0;
     this.trauma = Math.max(0, this.trauma - dt * 1.8);
     this.muzzleLight.intensity = Math.max(0, this.muzzleLight.intensity - dt * 28);
 
     const def = HERO_BY_ID[this.heroId];
+    this.abilityCd -= dt;
+    if (def.ability && this.abilityCd <= 0) {
+      this.castAbility();
+      this.abilityCd = this.abilityMax;
+    }
+    this.minorCd -= dt;
+    if (this.minorCd <= 0) {
+      this.castMinorSkill();
+      this.minorCd = this.minor.skillCd;
+    }
     const { ix, iy } = this.input.axes();
-    // Screen-relative: +ix = right (+X), +iy = up on screen (−Z)
-    const speed = def.speed * this.speedMul;
+    const speed = def.speed * this.speedMul * (this.leapT > 0 ? 1.55 : 1);
     const wantX = ix * speed;
     const wantZ = -iy * speed;
     const k = 1 - Math.exp(-16 * dt);
@@ -412,7 +463,7 @@ export class ArcanaGame {
       this.yaw = Math.atan2(this.pvx, this.pvz);
     }
 
-    if (nearest && nd < 12 * 12 && this.fireCd <= 0) {
+    if (nearest && nd < 18 * 18 && this.fireCd <= 0) {
       this.shoot();
       this.fireCd = def.fireRate / this.rateMul;
     }
@@ -426,9 +477,8 @@ export class ArcanaGame {
 
     if (
       !this.picking &&
-      this.pendingWaves.length === 0 &&
-      this.enemies.every((e) => !e.live) &&
-      this.spawnT <= 0
+      this.bossSpawned &&
+      this.enemies.every((e) => !e.live)
     ) {
       this.roomClear();
     }
@@ -449,10 +499,10 @@ export class ArcanaGame {
       oy = w.y;
       oz = w.z;
     }
-    const base = this.yaw;
+    const base = this.yaw + (this.heroId === "fool" ? (Math.random() - 0.5) * 0.12 : 0);
     const n = this.shots;
-    const spread = (n - 1) * 0.18;
-    const speed = def.projectileSpeed;
+    const spread = (n - 1) * (this.heroId === "swords" ? 0.28 : 0.18);
+    const speed = def.projectileSpeed * (this.heroId === "pentacles" ? 0.9 : 1);
     const dmg = def.damage * this.dmgMul * this.giant;
     const fireOne = (ang: number, dmgMul = 1) => {
       const b = this.allocBullet(0, def.color, kind);
@@ -461,14 +511,15 @@ export class ArcanaGame {
       b.z = oz;
       b.vx = Math.sin(ang) * speed;
       b.vz = Math.cos(ang) * speed;
-      b.life = 1.35;
+      b.life = this.heroId === "swords" ? 1.15 : 1.35;
       b.dmg = dmg * dmgMul;
       b.pierce = this.pierce;
-      b.r = 0.16 * this.giant;
-      b.homing = this.homing;
+      b.r = 0.16 * this.giant * (this.heroId === "pentacles" ? 1.25 : 1);
+      b.homing = this.homing || this.heroId === "world";
       b.burn = this.burn;
       b.kind = kind;
-      b.mesh.scale.set(0.55 * this.giant, 0.55 * this.giant, 0.55 * this.giant);
+      const sc = 0.55 * this.giant * (this.heroId === "pentacles" ? 1.2 : 1);
+      b.mesh.scale.set(sc, sc, 0.55 * this.giant);
       b.mesh.rotation.set(0.15, ang, (Math.random() - 0.5) * 0.4);
     };
     for (let i = 0; i < n; i++) {
@@ -479,7 +530,7 @@ export class ArcanaGame {
       fireOne(base - 0.42);
       fireOne(base + 0.42);
     }
-    if (this.wildcard && Math.random() < 0.15) fireOne(base + (Math.random() - 0.5) * 0.6);
+    if (this.wildcard && Math.random() < (this.heroId === "fool" ? 0.22 : 0.15)) fireOne(base + (Math.random() - 0.5) * 0.6);
     // Action-eye fan of extra cards (visual + light chip damage)
     const fan = 3;
     for (let i = 0; i < fan; i++) {
@@ -491,6 +542,117 @@ export class ArcanaGame {
     this.muzzleLight.intensity = 4.4;
     this.muzzleLight.position.set(ox, oy, oz);
     this.trauma = Math.min(1, this.trauma + 0.08);
+  }
+
+  private castAbility() {
+    const def = HERO_BY_ID[this.heroId];
+    const name = def.ability ?? "Arcana";
+    this.float(name, "#e8c456", this.px, this.pz);
+    this.audio.power();
+    this.trauma = Math.min(1, this.trauma + 0.28);
+    this.muzzleLight.color.setHex(def.color);
+    this.muzzleLight.intensity = 6.5;
+    this.muzzleLight.position.set(this.px, 1.1, this.pz);
+    const dmg = def.damage * this.dmgMul * 0.85;
+    const ring = (n: number, kind: CardKind, color: number, speed: number, extras: Partial<Pick<Bullet, "pierce" | "burn" | "homing" | "life" | "r">> = {}) => {
+      for (let k = 0; k < n; k++) {
+        const ang = (k / n) * Math.PI * 2 + this.t;
+        const b = this.allocBullet(0, color, kind);
+        b.x = this.px;
+        b.y = 0.95;
+        b.z = this.pz;
+        b.vx = Math.sin(ang) * speed;
+        b.vz = Math.cos(ang) * speed;
+        b.life = extras.life ?? 1.15;
+        b.dmg = dmg;
+        b.pierce = extras.pierce ?? 0;
+        b.r = extras.r ?? 0.2;
+        b.homing = extras.homing ?? false;
+        b.burn = extras.burn ?? false;
+        b.kind = kind;
+        b.mesh.scale.set(0.7, 0.7, 0.7);
+      }
+    };
+    switch (this.heroId) {
+      case "fool":
+        this.leapT = 0.55;
+        ring(10, "chaos", def.color, 11, { pierce: 1, life: 1.05 });
+        break;
+      case "swords": {
+        for (const side of [-0.18, 0.18]) {
+          for (let i = 0; i < 4; i++) {
+            const ang = this.yaw + side;
+            const b = this.allocBullet(0, def.color, "swords");
+            b.x = this.px + Math.sin(this.yaw + Math.PI / 2) * side * 2;
+            b.y = 1.0;
+            b.z = this.pz + Math.cos(this.yaw + Math.PI / 2) * side * 2;
+            b.vx = Math.sin(ang) * (16 + i * 1.4);
+            b.vz = Math.cos(ang) * (16 + i * 1.4);
+            b.life = 1.05;
+            b.dmg = dmg * 1.15;
+            b.pierce = 3;
+            b.r = 0.2;
+            b.kind = "swords";
+            b.mesh.scale.set(0.75, 0.75, 0.75);
+          }
+        }
+        break;
+      }
+      case "pentacles":
+        ring(12, "pentacles", 0xe8c456, 8.5, { pierce: 1, r: 0.24 });
+        this.magnet = Math.max(this.magnet, 5.5);
+        for (let i = 0; i < 6; i++) {
+          this.spawnCoin(this.px + (Math.random() - 0.5) * 2.2, this.pz + (Math.random() - 0.5) * 2.2);
+        }
+        break;
+      case "wands":
+        ring(14, "wands", 0xff6a20, 10, { burn: true, pierce: 1 });
+        for (const e of this.enemies) {
+          if (e.live && Math.hypot(e.x - this.px, e.z - this.pz) < 5.5) e.burn = Math.max(e.burn, 2.2);
+        }
+        break;
+      case "cups":
+        this.hp = Math.min(this.maxHp, this.hp + 22);
+        this.float("+HP", "#5ec8e8", this.px, this.pz);
+        ring(10, "cups", 0x5ec8e8, 9, { homing: true });
+        for (const e of this.enemies) {
+          if (!e.live) continue;
+          const dx = e.x - this.px;
+          const dz = e.z - this.pz;
+          const d = Math.hypot(dx, dz) || 1;
+          if (d < 6.5) {
+            e.x += (dx / d) * 2.4;
+            e.z += (dz / d) * 2.4;
+          }
+        }
+        break;
+      case "world": {
+        const kinds: CardKind[] = ["swords", "wands", "cups", "pentacles", "major", "chaos"];
+        for (let k = 0; k < 12; k++) {
+          const kind = kinds[k % kinds.length]!;
+          const ang = (k / 12) * Math.PI * 2;
+          const b = this.allocBullet(0, def.color, kind);
+          b.x = this.px;
+          b.y = 1.05;
+          b.z = this.pz;
+          b.vx = Math.sin(ang) * 9.5;
+          b.vz = Math.cos(ang) * 9.5;
+          b.life = 1.35;
+          b.dmg = dmg;
+          b.pierce = 1;
+          b.homing = true;
+          b.kind = kind;
+          b.mesh.scale.set(0.72, 0.72, 0.72);
+        }
+        break;
+      }
+      default:
+        ring(8, "major", def.color, 9);
+    }
+    for (let i = 0; i < 14; i++) {
+      const a = (i / 14) * Math.PI * 2;
+      this.spawnSpark(this.px, 1, this.pz, Math.sin(a) * 7, 2 + Math.random() * 2, Math.cos(a) * 7, def.accent, 0.4);
+    }
   }
 
   private allocBullet(team: 0 | 1, color: number, kind: CardKind = "major"): Bullet {
@@ -516,6 +678,7 @@ export class ArcanaGame {
       homing: false,
       burn: false,
       kind,
+      delay: 0,
     };
     this.bullets.push(b);
     return b;
@@ -568,24 +731,41 @@ export class ArcanaGame {
         this.bullets.splice(i, 1);
         continue;
       }
-      if (b.homing && b.team === 0) {
-        let best: Enemy | null = null;
-        let bd = 40;
-        for (const e of this.enemies) {
-          if (!e.live) continue;
-          const d = Math.hypot(e.x - b.x, e.z - b.z);
-          if (d < bd) {
-            bd = d;
-            best = e;
+      if (b.delay > 0) {
+        b.delay -= dt;
+        b.mesh.position.set(b.x, b.y, b.z);
+        const pulse = 0.45 + Math.abs(Math.sin(this.t * 14)) * 0.12;
+        b.mesh.scale.setScalar(pulse);
+        b.mesh.lookAt(this.camera.position);
+        continue;
+      }
+      if (b.homing) {
+        if (b.team === 0) {
+          let best: Enemy | null = null;
+          let bd = 40;
+          for (const e of this.enemies) {
+            if (!e.live) continue;
+            const d = Math.hypot(e.x - b.x, e.z - b.z);
+            if (d < bd) {
+              bd = d;
+              best = e;
+            }
           }
-        }
-        if (best) {
-          const ang = Math.atan2(best.x - b.x, best.z - b.z);
-          const spd = Math.hypot(b.vx, b.vz);
+          if (best) {
+            const ang = Math.atan2(best.x - b.x, best.z - b.z);
+            const spd = Math.hypot(b.vx, b.vz) || 8;
+            const tx = Math.sin(ang) * spd;
+            const tz = Math.cos(ang) * spd;
+            b.vx += (tx - b.vx) * Math.min(1, 6 * dt);
+            b.vz += (tz - b.vz) * Math.min(1, 6 * dt);
+          }
+        } else {
+          const ang = Math.atan2(this.px - b.x, this.pz - b.z);
+          const spd = Math.hypot(b.vx, b.vz) || 8;
           const tx = Math.sin(ang) * spd;
           const tz = Math.cos(ang) * spd;
-          b.vx += (tx - b.vx) * Math.min(1, 6 * dt);
-          b.vz += (tz - b.vz) * Math.min(1, 6 * dt);
+          b.vx += (tx - b.vx) * Math.min(1, 4.2 * dt);
+          b.vz += (tz - b.vz) * Math.min(1, 4.2 * dt);
         }
       }
       b.x += b.vx * dt;
@@ -611,7 +791,7 @@ export class ArcanaGame {
         for (const e of this.enemies) {
           if (!e.live) continue;
           if (Math.hypot(e.x - b.x, e.z - b.z) < e.r + b.r) {
-            this.hurtEnemy(e, b.dmg, b.x, b.z, b.burn);
+            this.hurtEnemy(e, b.dmg, b.x, b.z, b.burn, b.kind);
             b.pierce -= 1;
             if (b.pierce < 0) {
               this.freeBullet(b);
@@ -662,10 +842,33 @@ export class ArcanaGame {
       ax /= al;
       az /= al;
 
-      const stop = e.kind === "mage" ? 6.2 : e.kind === "boss" ? 2.4 : 0.9;
-      if (dist > stop) {
-        e.x += ax * e.speed * dt;
-        e.z += az * e.speed * dt;
+      const stop =
+        e.kind === "mage"
+          ? 6.2
+          : e.kind === "court" && e.court === "queen"
+            ? 6.4
+            : e.kind === "court" && e.court === "king"
+              ? 3.6
+            : e.kind === "court" && e.court === "knight"
+              ? 1.4
+            : e.kind === "boss" && e.bossId
+              ? bossRange(e.bossId)
+              : e.kind === "boss"
+                ? 2.4
+                : 0.9;
+      e.slow = Math.max(0, e.slow - dt);
+      const drag = e.slow > 0 ? 0.48 : 1;
+      if (e.kind === "boss" && e.dashT > 0) {
+        e.x += e.dvx * dt;
+        e.z += e.dvz * dt;
+        e.dashT -= dt;
+      } else if (e.kind === "court" && e.dashT > 0) {
+        e.x += e.dvx * dt;
+        e.z += e.dvz * dt;
+        e.dashT -= dt;
+      } else if (dist > stop) {
+        e.x += ax * e.speed * drag * dt;
+        e.z += az * e.speed * drag * dt;
       }
       this.keepIn(e, e.r);
       e.yaw = Math.atan2(dx, dz);
@@ -684,7 +887,7 @@ export class ArcanaGame {
       e.atk -= dt;
       if (e.kind === "mage" && dist < 9 && e.atk <= 0) {
         e.atk = 1.6;
-        const b = this.allocBullet(1, 0xc4453c);
+        const b = this.allocBullet(1, suitColor(e.suit), e.suit);
         b.x = e.x;
         b.y = 0.8;
         b.z = e.z;
@@ -693,22 +896,14 @@ export class ArcanaGame {
         b.vz = (dz / dist) * s;
         b.dmg = e.dmg;
         b.life = 2.2;
+        b.delay = this.mods.delayShots ? 0.45 : 0;
+        b.homing = e.suit === "cups";
+        b.burn = e.suit === "wands";
+        b.kind = e.suit;
       }
-      if (e.kind === "boss" && e.atk <= 0) {
-        e.atk = 2.1;
-        for (let k = 0; k < 8; k++) {
-          const ang = (k / 8) * Math.PI * 2 + this.t;
-          const b = this.allocBullet(1, 0xe8c456);
-          b.x = e.x;
-          b.y = 1.2;
-          b.z = e.z;
-          b.vx = Math.sin(ang) * 7;
-          b.vz = Math.cos(ang) * 7;
-          b.dmg = e.dmg;
-          b.life = 2.4;
-          b.r = 0.22;
-        }
-        this.trauma = Math.min(1, this.trauma + 0.35);
+      if (e.kind === "court") this.tickCourt(e, dist, dx, dz);
+      if (e.kind === "boss" && e.bossId) {
+        this.tickBoss(e, dt, dist);
       }
 
       if (this.iFrame <= 0 && dist < e.r + 0.55) {
@@ -719,7 +914,31 @@ export class ArcanaGame {
     }
   }
 
-  private hurtEnemy(e: Enemy, dmg: number, hx: number, hz: number, burn: boolean) {
+  private hurtEnemy(e: Enemy, dmg: number, hx: number, hz: number, burn: boolean, kind: CardKind = "major") {
+    if (this.resonate === "match") dmg *= 1.14;
+    else if (this.resonate === "oppose") dmg *= 0.9;
+    if (kind === "wands" && e.suit === "cups") {
+      dmg *= 1.1;
+      for (const o of this.enemies) {
+        if (!o.live || o === e) continue;
+        if (Math.hypot(o.x - e.x, o.z - e.z) < 1.8) {
+          o.hp -= dmg * 0.28;
+          o.flash = 1;
+          if (o.hp <= 0) this.killEnemy(o);
+        }
+      }
+      if (Math.random() < 0.2) this.float("STEAM", "#ffb080", e.x, e.z);
+    } else if (kind === "cups" && e.suit === "wands") {
+      dmg *= 1.28;
+      e.burn = 0;
+      if (Math.random() < 0.22) this.float("DOUSE", "#5ec8e8", e.x, e.z);
+    } else if (kind === "swords" && e.suit === "pentacles") {
+      dmg *= 1.35;
+      if (Math.random() < 0.22) this.float("SHATTER", "#c0d4ff", e.x, e.z);
+    } else if (kind === "pentacles" && e.suit === "swords") {
+      e.slow = Math.max(e.slow, 1.15);
+      if (Math.random() < 0.22) this.float("WEIGHT", "#e8c456", e.x, e.z);
+    }
     e.hp -= dmg;
     e.flash = 1;
     const nx = e.x - hx;
@@ -729,6 +948,25 @@ export class ArcanaGame {
     e.z += (nz / nl) * 0.28;
     if (burn) e.burn = 1.4;
     if (this.vamp > 0) this.hp = Math.min(this.maxHp, this.hp + dmg * this.vamp);
+    if (this.heroId === "pentacles" && Math.random() < 0.16) {
+      this.spawnCoin(e.x + (Math.random() - 0.5) * 0.4, e.z + (Math.random() - 0.5) * 0.4);
+    }
+    if (this.heroId === "wands" && burn) {
+      for (const o of this.enemies) {
+        if (!o.live || o === e) continue;
+        if (Math.hypot(o.x - e.x, o.z - e.z) < 1.55) o.burn = Math.max(o.burn, 0.85);
+      }
+    }
+    if (this.heroId === "cups" && dmg > 4) {
+      for (const o of this.enemies) {
+        if (!o.live || o === e) continue;
+        if (Math.hypot(o.x - e.x, o.z - e.z) < 1.7) {
+          o.hp -= dmg * 0.32;
+          o.flash = 1;
+          if (o.hp <= 0) this.killEnemy(o);
+        }
+      }
+    }
     this.audio.hit();
     this.float(`-${Math.round(dmg)}`, "#efe6c9", e.x, e.z);
     const col = HERO_BY_ID[this.heroId].color;
@@ -750,9 +988,33 @@ export class ArcanaGame {
     this.audio.kill();
     this.freeze = this.reduced ? 0 : 0.04;
     this.trauma = Math.min(1, this.trauma + (e.kind === "boss" ? 0.55 : 0.2));
-    const n = Math.max(1, Math.round(e.coins * this.goldMul));
+    const n = Math.max(1, Math.round(e.coins * this.goldMul * this.mods.goldMul));
     for (let i = 0; i < n; i++) this.spawnCoin(e.x + (Math.random() - 0.5), e.z + (Math.random() - 0.5));
     this.float(`+${pts}`, "#e8c456", e.x, e.z);
+    if (e.kind !== "boss") {
+      const gain = (e.kind === "court" ? 3 : 1) * (this.resonate === "match" ? 1.5 : this.resonate === "wild" ? 1.2 : 1);
+      this.pips += gain;
+      this.minorCd -= 0.4 * gain;
+      if (this.pips >= this.mods.pipsMax) {
+        this.pips = 0;
+        this.minorCd = 0;
+      }
+    }
+    if (e.kind === "boss") {
+      for (const o of this.enemies) {
+        if (o !== e && o.live) {
+          o.live = false;
+          o.mesh.visible = false;
+          this.scene.remove(o.mesh);
+        }
+      }
+      return;
+    }
+    this.kills += 1;
+    if (!this.bossSpawned && this.kills >= this.quota && this.bossDelay <= 0) {
+      this.bossDelay = 1.1;
+      this.float("THE ARCANA AWAKENS", "#e8c456", this.px, this.pz);
+    }
   }
 
   private hurtPlayer(dmg: number) {
@@ -780,13 +1042,51 @@ export class ArcanaGame {
   }
 
   private spawnWaves(dt: number) {
+    if (this.bossDelay > 0) {
+      this.bossDelay -= dt;
+      if (this.bossDelay <= 0 && !this.bossSpawned) {
+        this.spawnEnemy("boss");
+        this.bossSpawned = true;
+      }
+      return;
+    }
+    if (this.bossSpawned) return;
+    if (this.kills >= this.quota) return;
+    if (!this.courtSpawned && this.mods.court && this.kills >= this.quota * 0.42) {
+      this.spawnCourt(this.mods.court);
+      this.courtSpawned = true;
+      this.spawnT = 0.6;
+      return;
+    }
     this.spawnT -= dt;
     if (this.spawnT > 0) return;
-    if (!this.pendingWaves.length) return;
-    if (this.enemies.some((e) => e.live)) return;
-    const wave = this.pendingWaves.shift()!;
-    for (let i = 0; i < wave.n; i++) this.spawnEnemy(wave.kind);
-    this.spawnT = 0.4;
+    const live = this.enemies.filter((e) => e.live).length;
+    const cap = 6 + Math.min(8, Math.floor(this.room / 2)) + this.mods.capAdd;
+    if (live >= cap) {
+      this.spawnT = 0.22;
+      return;
+    }
+    this.spawnEnemy(this.nextMinion());
+    if (this.mods.pairSpawn && live + 1 < cap) this.spawnEnemy(this.nextMinion());
+    const pace = Math.max(0.22, 0.78 - this.room * 0.018 - this.kills * 0.006);
+    this.spawnT = pace;
+  }
+
+  private nextMinion(): EnemyKind {
+    const p = this.quota <= 0 ? 1 : this.kills / this.quota;
+    const r = this.room;
+    if (this.mods.court === "page" && Math.random() < 0.22) return "wisp";
+    if (p < 0.22) return "wisp";
+    if (p < 0.45) return Math.random() < 0.55 ? "scarab" : "wisp";
+    if (p < 0.7) {
+      if (r >= 4 && Math.random() < 0.28) return "brute";
+      return Math.random() < 0.65 ? "scarab" : "wisp";
+    }
+    const roll = Math.random();
+    if (r >= 6 && roll < 0.28 + this.mods.mageBias) return "mage";
+    if (r >= 3 && roll < 0.55) return "brute";
+    if (roll < 0.82) return "scarab";
+    return "wisp";
   }
 
   private spawnEnemy(kind: EnemyKind) {
@@ -809,11 +1109,12 @@ export class ArcanaGame {
         x = this.half - 1.1;
         z = u;
       }
-      if (Math.hypot(x - this.px, z - this.pz) > 4) break;
+      if (Math.hypot(x - this.px, z - this.pz) > 8) break;
     }
-    const tint = THEMES[(this.room - 1) % THEMES.length]!;
-    const mesh = kind === "boss" ? createAnubis(1.55, false) : createEnemyMesh(kind, tint);
-    if (kind !== "boss") mesh.scale.setScalar(1.05);
+    const tint = suitColor(this.minor.suit);
+    const boss = kind === "boss" ? storyBoss(this.room) : null;
+    const mesh = boss ? createBossMesh(boss.id) : createEnemyMesh(kind, tint);
+    if (!boss) mesh.scale.setScalar(kind === "court" ? 1.35 : 1.05);
     this.scene.add(mesh);
     const stats =
       kind === "wisp"
@@ -824,29 +1125,443 @@ export class ArcanaGame {
             ? { hp: 90, r: 0.7, speed: 2.1, dmg: 14, score: 320, coins: 3 }
             : kind === "mage"
               ? { hp: 48, r: 0.42, speed: 2.4, dmg: 10, score: 240, coins: 2 }
-              : { hp: 280, r: 1.15, speed: 1.7, dmg: 15, score: 1800, coins: 12 };
+              : kind === "court"
+                ? { hp: 160, r: 0.82, speed: 2.4, dmg: 13, score: 640, coins: 5 }
+                : { hp: 340, r: 0.95, speed: 1.55, dmg: 16, score: 2200, coins: 14 };
+    const mul = boss ? bossHpMul(boss.id) : 1;
     const e: Enemy = {
       live: true,
       kind,
+      bossId: boss?.id,
+      bossTitle: boss?.title,
       x,
       z,
       vx: 0,
       vz: 0,
-      r: stats.r * (kind === "boss" ? 1.4 : 1.45),
-      hp: Math.round(stats.hp * roomScale),
-      maxHp: Math.round(stats.hp * roomScale),
+      r: stats.r * (kind === "boss" ? 1.35 : 1.45),
+      hp: Math.round(stats.hp * roomScale * (boss ? 1.15 * mul : this.mods.hpMul)),
+      maxHp: Math.round(stats.hp * roomScale * (boss ? 1.15 * mul : this.mods.hpMul)),
+      yaw: 0,
+      speed: (stats.speed + this.room * 0.04) * (boss ? bossSpeedMul(boss.id) : this.mods.speedMul),
+      dmg: Math.round(stats.dmg * (1 + this.room * 0.06)),
+      score: Math.round(stats.score * (this.resonate === "oppose" ? 1.15 : 1)),
+      coins: stats.coins,
+      flash: 0,
+      burn: 0,
+      atk: boss ? 1.35 : 1.2,
+      ai: 0,
+      mode: 0,
+      dashT: 0,
+      dvx: 0,
+      dvz: 0,
+      phase: 0,
+      moveName: "",
+      suit: this.minor.suit,
+      slow: 0,
+      mesh,
+    };
+    mesh.position.set(x, 0, z);
+    this.enemies.push(e);
+    if (boss) this.float(boss.title, "#e8c456", x, z);
+  }
+
+  private placeAdd(kind: EnemyKind, x: number, z: number) {
+    const live = this.enemies.filter((n) => n.live && n.kind !== "boss").length;
+    if (live >= 7) return;
+    const clampedX = Math.max(-this.half + 1.4, Math.min(this.half - 1.4, x));
+    const clampedZ = Math.max(-this.half + 1.4, Math.min(this.half - 1.4, z));
+    const tint = THEMES[(this.room - 1) % THEMES.length]!;
+    const mesh = createEnemyMesh(kind, tint);
+    mesh.scale.setScalar(1.05);
+    this.scene.add(mesh);
+    const stats =
+      kind === "wisp"
+        ? { hp: 22, r: 0.38, speed: 3.3, dmg: 7, score: 80, coins: 1 }
+        : kind === "scarab"
+          ? { hp: 38, r: 0.46, speed: 4.1, dmg: 8, score: 120, coins: 1 }
+          : kind === "brute"
+            ? { hp: 90, r: 0.7, speed: 2.1, dmg: 14, score: 200, coins: 2 }
+            : { hp: 48, r: 0.42, speed: 2.4, dmg: 10, score: 160, coins: 1 };
+    const roomScale = 1 + (this.room - 1) * 0.12;
+    const e: Enemy = {
+      live: true,
+      kind,
+      x: clampedX,
+      z: clampedZ,
+      vx: 0,
+      vz: 0,
+      r: stats.r * 1.35,
+      hp: Math.round(stats.hp * roomScale * 0.85),
+      maxHp: Math.round(stats.hp * roomScale * 0.85),
       yaw: 0,
       speed: stats.speed + this.room * 0.04,
+      dmg: Math.round(stats.dmg * (1 + this.room * 0.05)),
+      score: stats.score,
+      coins: stats.coins,
+      flash: 0,
+      burn: 0,
+      atk: 1.4,
+      ai: 0,
+      mode: 0,
+      dashT: 0,
+      dvx: 0,
+      dvz: 0,
+      phase: 0,
+      moveName: "",
+      suit: this.minor.suit,
+      slow: 0,
+      mesh,
+    };
+    mesh.position.set(clampedX, 0, clampedZ);
+    this.enemies.push(e);
+  }
+
+  private spawnCourt(rank: CourtRank) {
+    if (rank === "page") {
+      this.float("Page of " + this.minor.title.split(" ").pop(), this.mods.css, this.px, this.pz);
+      for (let i = 0; i < 4; i++) this.spawnEnemy("wisp");
+      return;
+    }
+    const ang = Math.random() * Math.PI * 2;
+    const x = Math.sin(ang) * (this.half - 2.2);
+    const z = Math.cos(ang) * (this.half - 2.2);
+    const tint = suitColor(this.minor.suit);
+    const mesh = createEnemyMesh("court", tint);
+    mesh.scale.setScalar(rank === "king" ? 1.55 : rank === "queen" ? 1.28 : 1.38);
+    this.scene.add(mesh);
+    const roomScale = 1 + (this.room - 1) * 0.12;
+    const stats =
+      rank === "king"
+        ? { hp: 220, r: 0.95, speed: 1.7, dmg: 16, score: 900, coins: 8 }
+        : rank === "queen"
+          ? { hp: 150, r: 0.72, speed: 2.15, dmg: 12, score: 720, coins: 6 }
+          : { hp: 170, r: 0.8, speed: 3.35, dmg: 14, score: 780, coins: 6 };
+    const e: Enemy = {
+      live: true,
+      kind: "court",
+      court: rank,
+      x,
+      z,
+      vx: 0,
+      vz: 0,
+      r: stats.r * 1.4,
+      hp: Math.round(stats.hp * roomScale * this.mods.hpMul),
+      maxHp: Math.round(stats.hp * roomScale * this.mods.hpMul),
+      yaw: 0,
+      speed: stats.speed * this.mods.speedMul,
       dmg: Math.round(stats.dmg * (1 + this.room * 0.06)),
       score: stats.score,
       coins: stats.coins,
       flash: 0,
       burn: 0,
-      atk: 1,
+      atk: 0.8,
+      ai: 0,
+      mode: 0,
+      dashT: 0,
+      dvx: 0,
+      dvz: 0,
+      phase: 0,
+      moveName: rank,
+      suit: this.minor.suit,
+      slow: 0,
       mesh,
     };
     mesh.position.set(x, 0, z);
     this.enemies.push(e);
+    this.float(this.minor.title, this.mods.css, x, z);
+    this.trauma = Math.min(1, this.trauma + 0.28);
+  }
+
+  private tickCourt(e: Enemy, dist: number, dx: number, dz: number) {
+    if (e.atk > 0) return;
+    const ang = Math.atan2(dx, dz);
+    const col = suitColor(e.suit);
+    if (e.court === "knight") {
+      e.atk = 1.7;
+      e.dvx = Math.sin(ang) * 16;
+      e.dvz = Math.cos(ang) * 16;
+      e.dashT = 0.42;
+      for (let i = 0; i < 3; i++) {
+        const b = this.allocBullet(1, col, e.suit);
+        b.x = e.x;
+        b.y = 1.1;
+        b.z = e.z;
+        b.vx = Math.sin(ang) * (10 + i * 2);
+        b.vz = Math.cos(ang) * (10 + i * 2);
+        b.dmg = e.dmg;
+        b.kind = e.suit;
+        b.burn = e.suit === "wands";
+      }
+    } else if (e.court === "queen") {
+      e.atk = 2.1;
+      for (const o of this.enemies) {
+        if (o.live && o !== e && o.kind !== "boss") o.hp = Math.min(o.maxHp, o.hp + 10);
+      }
+      for (let i = -1; i <= 1; i++) {
+        const b = this.allocBullet(1, col, e.suit);
+        b.x = e.x;
+        b.y = 1.2;
+        b.z = e.z;
+        b.vx = Math.sin(ang + i * 0.22) * 8;
+        b.vz = Math.cos(ang + i * 0.22) * 8;
+        b.dmg = e.dmg;
+        b.homing = true;
+        b.kind = e.suit;
+      }
+    } else {
+      e.atk = 1.85;
+      for (let k = 0; k < 4; k++) {
+        const a = (k * Math.PI) / 2;
+        const b = this.allocBullet(1, col, e.suit);
+        b.x = e.x;
+        b.y = 1.3;
+        b.z = e.z;
+        b.vx = Math.sin(a) * 8.5;
+        b.vz = Math.cos(a) * 8.5;
+        b.dmg = e.dmg * 1.1;
+        b.r = 0.24;
+        b.kind = e.suit;
+        b.pierce = 1;
+      }
+    }
+  }
+
+  private nearestEnemies(n: number) {
+    return this.enemies
+      .filter((e) => e.live)
+      .sort((a, b) => Math.hypot(a.x - this.px, a.z - this.pz) - Math.hypot(b.x - this.px, b.z - this.pz))
+      .slice(0, n);
+  }
+
+  private fireSuit(ang: number, speed: number, extra: Partial<Pick<Bullet, "burn" | "pierce" | "homing" | "delay" | "r" | "life" | "dmg">> & { ox?: number; oz?: number; y?: number } = {}) {
+    const suit = this.minor.suit;
+    const b = this.allocBullet(0, suitColor(suit), suit);
+    b.x = extra.ox ?? this.px;
+    b.y = extra.y ?? 1.05;
+    b.z = extra.oz ?? this.pz;
+    b.vx = Math.sin(ang) * speed;
+    b.vz = Math.cos(ang) * speed;
+    b.dmg = extra.dmg ?? HERO_BY_ID[this.heroId].damage * 0.95 * this.dmgMul * this.mods.climaxMul;
+    b.life = extra.life ?? 1.35;
+    b.kind = suit;
+    b.burn = extra.burn ?? suit === "wands";
+    b.pierce = extra.pierce ?? 0;
+    b.homing = extra.homing ?? false;
+    b.delay = extra.delay ?? 0;
+    if (extra.r) b.r = extra.r;
+  }
+
+  private knockback(r: number, force: number) {
+    for (const o of this.enemies) {
+      if (!o.live) continue;
+      const dx = o.x - this.px;
+      const dz = o.z - this.pz;
+      const d = Math.hypot(dx, dz) || 1;
+      if (d < r) {
+        o.x += (dx / d) * force;
+        o.z += (dz / d) * force;
+      }
+    }
+  }
+
+  private castMinorSkill() {
+    const card = this.minor;
+    const yaw = this.yaw;
+    this.float(card.skill, this.mods.css, this.px, this.pz);
+    this.audio.power();
+    this.trauma = Math.min(1, this.trauma + 0.28);
+    this.muzzleLight.color.setHex(suitColor(card.suit));
+    this.muzzleLight.intensity = 5.2;
+    switch (card.effect) {
+      case "spark":
+        this.leapT = Math.max(this.leapT, 0.4);
+        for (let i = 0; i < 5; i++) this.fireSuit(yaw + (i - 2) * 0.16, 12, { burn: true, pierce: 1 });
+        break;
+      case "first-cut":
+        this.fireSuit(yaw, 16, { pierce: 4, r: 0.32, dmg: HERO_BY_ID[this.heroId].damage * 1.6 * this.dmgMul });
+        this.fireSuit(yaw - 0.28, 13, { pierce: 2 });
+        this.fireSuit(yaw + 0.28, 13, { pierce: 2 });
+        break;
+      case "twin-bond":
+        this.hp = Math.min(this.maxHp, this.hp + 12);
+        this.fireSuit(yaw - 0.4, 8, { homing: true, ox: this.px - 1.2 });
+        this.fireSuit(yaw + 0.4, 8, { homing: true, ox: this.px + 1.2 });
+        break;
+      case "garden":
+        this.hp = Math.min(this.maxHp, this.hp + 14);
+        this.shield = Math.min(6, this.shield + 1);
+        this.shieldMax = Math.max(this.shieldMax, this.shield);
+        for (let i = 0; i < 6; i++) this.spawnCoin(this.px + (Math.random() - 0.5) * 2.4, this.pz + (Math.random() - 0.5) * 2.4);
+        for (let k = 0; k < 8; k++) this.fireSuit((k / 8) * Math.PI * 2, 7, { r: 0.24 });
+        break;
+      case "throne":
+        for (let k = 0; k < 4; k++) {
+          const a = (k * Math.PI) / 2;
+          for (let i = 0; i < 3; i++) this.fireSuit(a, 8 + i * 2.2, { burn: true, pierce: 1 });
+        }
+        break;
+      case "dispatch":
+        this.magnet = Math.max(this.magnet, 6);
+        for (let i = 0; i < 5; i++) this.spawnCoin(this.px + (Math.random() - 0.5) * 2, this.pz + (Math.random() - 0.5) * 2);
+        for (let k = 0; k < 8; k++) this.fireSuit((k / 8) * Math.PI * 2, 8, { r: 0.22 });
+        break;
+      case "heart-charge":
+        this.leapT = Math.max(this.leapT, 0.5);
+        for (let i = 0; i < 4; i++) this.fireSuit(yaw + (i - 1.5) * 0.2, 9, { homing: true });
+        break;
+      case "spear-line":
+        for (let i = 0; i < 6; i++) this.fireSuit(yaw, 12 + i * 1.3, { pierce: 3 });
+        break;
+      case "last-stand":
+        this.shield = Math.min(6, this.shield + 1);
+        this.shieldMax = Math.max(this.shieldMax, this.shield);
+        for (let k = 0; k < 9; k++) this.fireSuit((k / 9) * Math.PI * 2, 7.5, { burn: true, delay: 0.08 * k });
+        break;
+      case "still-cut":
+        for (const o of this.enemies) if (o.live) o.slow = Math.max(o.slow, 2.1);
+        for (let i = 0; i < 4; i++) this.fireSuit(yaw + (i - 1.5) * 0.22, 6, { pierce: 2, delay: 0.45 });
+        break;
+      case "juggle":
+        this.fireSuit(yaw - 0.5, 9, { pierce: 2, r: 0.28, homing: true });
+        this.fireSuit(yaw + 0.5, 9, { pierce: 2, r: 0.28, homing: true });
+        break;
+      case "cross":
+        for (let k = 0; k < 4; k++) this.fireSuit((k * Math.PI) / 2, 11, { pierce: 2 });
+        for (let k = 0; k < 4; k++) this.fireSuit((k * Math.PI) / 2 + Math.PI / 4, 11, { pierce: 2, delay: 0.18 });
+        break;
+      case "pour":
+        for (const t of this.nearestEnemies(4)) {
+          this.fireSuit(Math.atan2(t.x - this.px, t.z - this.pz), 4, {
+            ox: t.x,
+            oz: t.z,
+            delay: 0.55,
+            homing: true,
+            y: 1.6,
+          });
+        }
+        break;
+      case "ruin":
+        for (let i = 0; i < 10; i++) {
+          const ox = this.px + Math.sin(yaw) * (1.2 + i * 0.85);
+          const oz = this.pz + Math.cos(yaw) * (1.2 + i * 0.85);
+          this.fireSuit(yaw, 8, { ox, oz, delay: 0.12 * i, pierce: 1, y: 1.8 });
+        }
+        break;
+      case "tide-mercy":
+        this.hp = Math.min(this.maxHp, this.hp + 30);
+        this.knockback(6.2, 2.2);
+        for (let k = 0; k < 10; k++) this.fireSuit((k / 10) * Math.PI * 2, 8, { homing: true });
+        break;
+      case "high-ground":
+        this.knockback(6.5, 2.6);
+        for (let k = 0; k < 7; k++) this.fireSuit((k / 7) * Math.PI * 2, 9, { burn: true, pierce: 1 });
+        break;
+      case "burden":
+        for (let k = 0; k < 10; k++) this.fireSuit((k / 10) * Math.PI * 2, 5.2, { burn: true, r: 0.3, life: 2.2, pierce: 1 });
+        break;
+      case "hope-spring":
+        this.hp = Math.min(this.maxHp, this.hp + 22);
+        for (let k = 0; k < 7; k++) this.fireSuit((k / 7) * Math.PI * 2, 8, { homing: true });
+        break;
+      case "mirage":
+        for (let i = 0; i < 7; i++) {
+          this.fireSuit(Math.random() * Math.PI * 2, 5, { delay: 0.25 + i * 0.08, homing: true });
+        }
+        break;
+      case "hearth":
+        this.shield = Math.min(6, this.shield + 1);
+        this.shieldMax = Math.max(this.shieldMax, this.shield);
+        this.hp = Math.min(this.maxHp, this.hp + 10);
+        for (let k = 0; k < 8; k++) this.fireSuit((k / 8) * Math.PI * 2, 8, { burn: true });
+        break;
+      case "verdict": {
+        const t = this.nearestEnemies(1)[0];
+        const a = t ? Math.atan2(t.x - this.px, t.z - this.pz) : yaw;
+        if (t) {
+          for (let i = 0; i < 8; i++) {
+            const ang = (i / 8) * Math.PI * 2;
+            this.spawnSpark(t.x + Math.sin(ang) * 0.7, 0.3, t.z + Math.cos(ang) * 0.7, 0, 2, 0, suitColor("swords"), 0.45);
+          }
+        }
+        this.fireSuit(a, 4, { delay: 0.7, pierce: 4, r: 0.38, dmg: HERO_BY_ID[this.heroId].damage * 2.1 * this.dmgMul, ox: t?.x, oz: t?.z });
+        break;
+      }
+      case "kingdom":
+        this.shield = Math.min(6, this.shield + 2);
+        this.shieldMax = Math.max(this.shieldMax, this.shield);
+        for (let i = 0; i < 12; i++) this.spawnCoin(this.px + (Math.random() - 0.5) * 4, this.pz + (Math.random() - 0.5) * 4);
+        for (let k = 0; k < 12; k++) this.fireSuit((k / 12) * Math.PI * 2, 7.5, { r: 0.28, pierce: 1 });
+        break;
+      default:
+        for (let k = 0; k < 8; k++) this.fireSuit((k / 8) * Math.PI * 2, 9);
+    }
+  }
+
+  private tickBoss(e: Enemy, _dt: number, _dist: number) {
+    if (!e.bossId) return;
+    const def = HERO_BY_ID[e.bossId];
+    const api: BossApi = {
+      t: this.t,
+      px: this.px,
+      pz: this.pz,
+      half: this.half,
+      minions: this.enemies.filter((n) => n.live && n.kind !== "boss").length,
+      color: def.color,
+      accent: def.accent,
+      fire: (ang, speed, opts) => {
+        const col = opts?.color ?? def.color;
+        const kind = opts?.kind ?? "major";
+        const b = this.allocBullet(1, col, kind);
+        b.x = opts?.ox ?? e.x;
+        b.y = opts?.y ?? 1.4;
+        b.z = opts?.oz ?? e.z;
+        b.vx = Math.sin(ang) * speed;
+        b.vz = Math.cos(ang) * speed;
+        b.dmg = opts?.dmg ?? e.dmg;
+        b.life = opts?.life ?? 2.6;
+        b.r = opts?.r ?? 0.2;
+        b.burn = opts?.burn ?? false;
+        b.pierce = opts?.pierce ?? 0;
+        b.homing = opts?.homing ?? false;
+        b.delay = opts?.delay ?? 0;
+        b.kind = kind;
+        const sc = (opts?.r ?? 0.2) * 3.2;
+        b.mesh.scale.setScalar(Math.min(1.15, Math.max(0.55, sc)));
+      },
+      warn: (x, z, color) => {
+        for (let i = 0; i < 12; i++) {
+          const a = (i / 12) * Math.PI * 2;
+          this.spawnSpark(x + Math.sin(a) * 0.7, 0.25, z + Math.cos(a) * 0.7, 0, 2.2, 0, color, 0.4);
+        }
+      },
+      float: (text) => this.float(text, "#e8c456", e.x, e.z),
+      dash: (vx, vz, time) => {
+        e.dvx = vx;
+        e.dvz = vz;
+        e.dashT = time;
+      },
+      teleport: (x, z) => {
+        this.spawnSpark(e.x, 1, e.z, 0, 3, 0, def.color, 0.35);
+        e.x = Math.max(-this.half + 1.6, Math.min(this.half - 1.6, x));
+        e.z = Math.max(-this.half + 1.6, Math.min(this.half - 1.6, z));
+        e.mesh.position.set(e.x, 0, e.z);
+        this.spawnSpark(e.x, 1, e.z, 0, 3, 0, def.accent, 0.35);
+      },
+      spawn: (kind, x, z) => this.placeAdd(kind, x, z),
+      heal: (amt) => {
+        e.hp = Math.min(e.maxHp, e.hp + amt);
+      },
+      spark: (x, z, color) => {
+        for (let i = 0; i < 10; i++) {
+          const a = (i / 10) * Math.PI * 2;
+          this.spawnSpark(x, 1, z, Math.sin(a) * 5, 2, Math.cos(a) * 5, color, 0.32);
+        }
+      },
+      trauma: (n) => {
+        this.trauma = Math.min(1, this.trauma + n);
+      },
+    };
+    runBoss(e as BossState, _dt, _dist, api);
   }
 
   private spawnCoin(x: number, z: number) {
@@ -1067,13 +1782,15 @@ export class ArcanaGame {
   }
 
   private render(dt: number) {
+    this.cx += (this.px - this.cx) * Math.min(1, dt * 5.2);
+    this.cz += (this.pz - this.cz) * Math.min(1, dt * 5.2);
     const shake = this.reduced ? 0 : this.trauma * this.trauma;
     const ox = (Math.random() * 2 - 1) * shake * 0.35;
     const oy = (Math.random() * 2 - 1) * shake * 0.22;
-    this.camera.position.set(this.px + ox, this.camY + oy, this.pz + this.camZ);
-    this.camera.lookAt(this.px, 0.55, this.pz);
-    this.dirLight.position.set(this.px + 8, 18, this.pz + 10);
-    this.dirLight.target.position.set(this.px, 0, this.pz);
+    this.camera.position.set(this.cx + ox, this.camY + oy, this.cz + this.camZ);
+    this.camera.lookAt(this.cx, 0.4, this.cz);
+    this.dirLight.position.set(this.cx + 10, 22, this.cz + 12);
+    this.dirLight.target.position.set(this.cx, 0, this.cz);
     this.dirLight.target.updateMatrixWorld();
 
     this.playerMesh.position.set(this.px, 0, this.pz);
@@ -1103,10 +1820,14 @@ export class ArcanaGame {
   private pushHud() {
     let bossHp = 0;
     let bossMax = 0;
+    let bossName = "";
+    let bossMove = "";
     for (const e of this.enemies) {
       if (e.live && e.kind === "boss") {
         bossHp = e.hp;
         bossMax = e.maxHp;
+        bossName = e.bossTitle ?? "Major Arcana";
+        bossMove = e.moveName;
       }
     }
     const snap: HudSnap = {
@@ -1123,7 +1844,25 @@ export class ArcanaGame {
       stacks: { ...this.stacks },
       bossHp,
       bossMax,
+      bossName,
+      bossMove,
+      waitBoss: storyBoss(this.room).title,
       combo: this.combo,
+      kills: this.kills,
+      quota: this.quota,
+      abilityName: HERO_BY_ID[this.heroId].ability ?? "",
+      abilityPct: this.abilityMax > 0 ? 1 - Math.max(0, this.abilityCd) / this.abilityMax : 0,
+      abilityBlurb: HERO_BY_ID[this.heroId].abilityBlurb ?? HERO_BY_ID[this.heroId].passive,
+      minorTitle: this.minor.title,
+      minorBlurb: this.minor.blurb,
+      minorCss: this.mods.css,
+      minorSkill: this.minor.skill,
+      minorSkillBlurb: this.minor.skillBlurb,
+      minorCd: Math.max(0, this.minorCd),
+      minorCdMax: this.minor.skillCd,
+      pips: this.pips,
+      pipsMax: this.mods.pipsMax,
+      resonance: this.resonate === "match" ? "Resonance" : this.resonate === "oppose" ? "Dissonance" : "Wildcard",
     };
     this.hooks.onHud(snap);
   }
@@ -1141,6 +1880,11 @@ export class ArcanaGame {
       isOver: () => this.over,
       isPicking: () => this.picking,
       forceVictory: () => this.victory(),
+      forceBoss: () => {
+        this.kills = this.quota;
+        this.bossDelay = 0.05;
+        this.bossSpawned = false;
+      },
       ascendSquad: () => this.ascendSquad(),
       pickPower: (id: PowerId) => this.pickPower(id),
       setKeys: (codes) => this.input.setKeys(codes),
@@ -1203,9 +1947,9 @@ export class ArcanaGame {
     const h = this.canvas.clientHeight || vv?.height || window.innerHeight;
     this.camera.aspect = w / Math.max(1, h);
     const portrait = h > w * 1.08;
-    this.camY = portrait ? 22.5 : 18.5;
-    this.camZ = portrait ? 18.5 : 15.5;
-    this.camera.fov = portrait ? 36 : 40;
+    this.camY = portrait ? 36 : 30;
+    this.camZ = portrait ? 30 : 25;
+    this.camera.fov = portrait ? 44 : 48;
     this.camera.updateProjectionMatrix();
     this.renderer.setSize(w, h, false);
   };

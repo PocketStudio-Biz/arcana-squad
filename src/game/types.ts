@@ -57,7 +57,8 @@ export type HeroForm =
   | "ram"
   | "raccoon"
   | "rooster"
-  | "dragon";
+  | "dragon"
+  | "rabbit";
 
 export type WeaponKind =
   | "staff"
@@ -76,7 +77,7 @@ export type WeaponKind =
   | "scroll"
   | "scepter";
 
-export type EnemyKind = "wisp" | "scarab" | "brute" | "mage" | "boss";
+export type EnemyKind = "wisp" | "scarab" | "brute" | "mage" | "boss" | "court";
 
 export type PowerId =
   | "multishot"
@@ -113,7 +114,25 @@ export type HudSnap = {
   stacks: Partial<Record<PowerId, number>>;
   bossHp: number;
   bossMax: number;
+  bossName: string;
+  bossMove: string;
+  waitBoss: string;
   combo: number;
+  kills: number;
+  quota: number;
+  abilityName: string;
+  abilityPct: number;
+  abilityBlurb: string;
+  minorTitle: string;
+  minorBlurb: string;
+  minorCss: string;
+  minorSkill: string;
+  minorSkillBlurb: string;
+  minorCd: number;
+  minorCdMax: number;
+  pips: number;
+  pipsMax: number;
+  resonance: string;
 };
 
 export type ControlsProbe = {
@@ -132,6 +151,7 @@ export type ControlsProbe = {
   advance?: (seconds: number) => void;
   autoMove?: () => void;
   forceVictory?: () => void;
+  forceBoss?: () => void;
   ascendSquad?: () => void;
   pickPower?: (id: PowerId) => void;
 };

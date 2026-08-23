@@ -67,7 +67,7 @@ export function createHeroMesh(id: HeroId): THREE.Group {
     GEO.sphere,
     new THREE.MeshBasicMaterial({ color: 0x000000, transparent: true, opacity: 0.32, depthWrite: false }),
   );
-  shadow.scale.set(0.38, 0.035, 0.38);
+  shadow.scale.set(0.42, 0.035, 0.42);
   shadow.position.y = 0.02;
   g.add(shadow);
 
@@ -83,40 +83,90 @@ export function createHeroMesh(id: HeroId): THREE.Group {
   );
   ring.rotation.x = -Math.PI / 2;
   ring.position.y = 0.04;
-  ring.scale.set(0.55, 0.55, 0.55);
+  ring.scale.set(0.58, 0.58, 0.58);
   g.add(ring);
 
   const body = new THREE.Group();
-  add(body, GEO.sphere, robe, 0, 0.36, 0, 0.2, 0.14, 0.16);
-  add(body, GEO.sphere, robe, 0, 0.62, 0.02, 0.24, 0.26, 0.18);
-  add(body, GEO.cyl, gold, 0, 0.5, 0.12, 0.08, 0.04, 0.08);
-  add(body, GEO.cyl, dark, -0.09, 0.18, 0.02, 0.065, 0.32, 0.065);
-  add(body, GEO.cyl, dark, 0.09, 0.18, 0.02, 0.065, 0.32, 0.065);
-  add(body, GEO.sphere, dark, -0.09, 0.04, 0.08, 0.08, 0.045, 0.11);
-  add(body, GEO.sphere, dark, 0.09, 0.04, 0.08, 0.08, 0.045, 0.11);
-  add(body, GEO.cyl, robe, -0.26, 0.58, 0.02, 0.05, 0.32, 0.05, 0, 0, 0.45);
-  add(body, GEO.cyl, robe, 0.26, 0.58, 0.02, 0.05, 0.32, 0.05, 0, 0, -0.35);
+  add(body, GEO.sphereHi, robe, 0, 0.5, 0.02, 0.22, 0.16, 0.19);
+  add(body, GEO.sphereHi, robe, 0, 0.82, 0.04, 0.28, 0.32, 0.2);
+  add(body, GEO.cyl, gold, 0, 0.62, 0.03, 0.23, 0.05, 0.18);
+  add(body, GEO.octa, trim, 0, 0.62, 0.2, 0.08, 0.08, 0.055);
+  add(body, GEO.cyl, dark, -0.09, 0.24, 0.04, 0.062, 0.46, 0.062);
+  add(body, GEO.cyl, dark, 0.09, 0.24, 0.04, 0.062, 0.46, 0.062);
+  add(body, GEO.sphere, dark, -0.09, 0.03, 0.1, 0.09, 0.045, 0.13);
+  add(body, GEO.sphere, dark, 0.09, 0.03, 0.1, 0.09, 0.045, 0.13);
+  add(body, GEO.sphere, robe, 0, 0.78, -0.16, 0.3, 0.36, 0.12);
+  add(body, GEO.sphere, gold, -0.26, 0.94, 0.04, 0.1, 0.08, 0.09);
+  add(body, GEO.sphere, gold, 0.26, 0.94, 0.04, 0.1, 0.08, 0.09);
+  add(body, GEO.cyl, robe, -0.32, 0.66, 0.06, 0.052, 0.42, 0.052, 0, 0, 0.5);
+  add(body, GEO.cyl, robe, 0.32, 0.66, 0.06, 0.052, 0.42, 0.052, 0, 0, -0.4);
+  add(body, GEO.sphere, fur, -0.4, 0.44, 0.14, 0.06, 0.055, 0.06);
+  add(body, GEO.sphere, fur, 0.41, 0.46, 0.15, 0.06, 0.055, 0.06);
+
+  if (h.weaponKind === "staff" || h.weaponKind === "wand") {
+    add(body, GEO.cone, robe, 0, 1.12, -0.04, 0.3, 0.42, 0.3);
+  }
+  if (h.form === "turtle") {
+    add(body, GEO.sphere, mat(0x2a4a22, { rough: 0.7, metal: 0.28 }), 0, 0.74, -0.16, 0.34, 0.24, 0.24);
+    add(body, GEO.octa, gold, 0, 0.9, -0.28, 0.09, 0.09, 0.07);
+    add(body, GEO.octa, gold, -0.14, 0.72, -0.28, 0.06, 0.06, 0.05);
+    add(body, GEO.octa, gold, 0.14, 0.72, -0.28, 0.06, 0.06, 0.05);
+  }
+  if (h.form === "dragon" || h.form === "lizard") {
+    add(body, GEO.cone, robe, -0.38, 0.86, -0.12, 0.1, 0.62, 0.26, 0.2, 0, 1.15);
+    add(body, GEO.cone, robe, 0.38, 0.86, -0.12, 0.1, 0.62, 0.26, 0.2, 0, -1.15);
+    add(body, GEO.cone, fur, 0, 0.5, -0.36, 0.08, 0.7, 0.12, 1.15, 0, 0);
+  }
+  if (h.form === "lynx" || h.form === "otter" || h.form === "fox" || h.form === "wolf") {
+    add(body, GEO.cone, fur, 0, 0.42, -0.32, 0.07, 0.55, 0.1, 1.05, 0, 0);
+  }
 
   const head = new THREE.Group();
-  head.position.set(0, 0.95, 0.04);
+  head.position.set(0, 1.18, 0.06);
   speciesHead(h.form, head, fur, gold, trim, dark);
   body.add(head);
 
+  const dual = h.weaponKind === "blades";
   const wpn = new THREE.Group();
-  wpn.position.set(0.32, 0.42, 0.1);
-  wpn.rotation.z = -0.25;
+  wpn.position.set(dual ? 0.34 : 0.3, 0.4, 0.12);
+  wpn.rotation.z = -0.22;
   heroWeapon(h.weaponKind, wpn, gold, trim, dark);
   body.add(wpn);
+  if (dual) {
+    const left = new THREE.Group();
+    left.position.set(-0.34, 0.4, 0.12);
+    left.rotation.z = 0.22;
+    heroWeapon(h.weaponKind, left, gold, trim, dark);
+    body.add(left);
+  }
   g.add(body);
 
   const muzzle = new THREE.Object3D();
-  muzzle.position.set(0.2, 0.95, 0.42);
+  muzzle.position.set(0.2, 1.16, 0.52);
   g.add(muzzle);
 
   g.userData.muzzle = muzzle;
   g.userData.body = body;
   g.userData.ring = ring;
   g.userData.bob = body;
+  g.scale.setScalar(1.18);
+  return g;
+}
+
+export function createBossMesh(id: HeroId): THREE.Group {
+  const g = createHeroMesh(id);
+  g.scale.setScalar(2.05);
+  const bar = new THREE.Group();
+  bar.position.set(0, 2.05, 0);
+  const bg = new THREE.Mesh(GEO.box, new THREE.MeshBasicMaterial({ color: 0x220808 }));
+  bg.scale.set(1.15, 0.08, 0.08);
+  const fg = new THREE.Mesh(GEO.box, new THREE.MeshBasicMaterial({ color: 0xe8c456 }));
+  fg.scale.set(1.1, 0.06, 0.09);
+  fg.position.z = 0.01;
+  bar.add(bg, fg);
+  g.add(bar);
+  g.userData.hpBar = bar;
+  g.userData.hpFg = fg;
   return g;
 }
 
@@ -146,6 +196,7 @@ const FUR: Record<HeroForm, number> = {
   raccoon: 0x6a5a48,
   rooster: 0xc43c1c,
   dragon: 0x2a8a4a,
+  rabbit: 0xe8d4b0,
 };
 
 function speciesFur(form: HeroForm) {
@@ -162,7 +213,7 @@ function speciesHead(
 ) {
   const eyeW = mat(0xf4f0e8);
   const eyeB = mat(0x111111);
-  add(head, GEO.sphere, fur, 0, 0, 0, 0.28, 0.26, 0.26);
+  add(head, GEO.sphereHi, fur, 0, 0, 0, 0.29, 0.27, 0.27);
 
   const ears = (spread: number, h: number, s: number, inner?: THREE.Material) => {
     add(head, GEO.sphere, fur, -spread, h, -0.02, s, s * 1.15, s * 0.7);
@@ -218,6 +269,14 @@ function speciesHead(
       add(head, GEO.cone, gold, -0.16, 0.28, -0.04, 0.05, 0.22, 0.05);
       add(head, GEO.cone, gold, 0.16, 0.28, -0.04, 0.05, 0.22, 0.05);
     }
+  } else if (form === "rabbit") {
+    const cream = mat(0xf2e6d0);
+    add(head, GEO.sphere, fur, -0.1, 0.38, -0.02, 0.06, 0.28, 0.07);
+    add(head, GEO.sphere, fur, 0.1, 0.38, -0.02, 0.06, 0.28, 0.07);
+    add(head, GEO.sphere, cream, -0.1, 0.38, 0.03, 0.03, 0.18, 0.03);
+    add(head, GEO.sphere, cream, 0.1, 0.38, 0.03, 0.03, 0.18, 0.03);
+    add(head, GEO.sphere, cream, 0, -0.04, 0.18, 0.12, 0.1, 0.12);
+    eyes();
   } else if (form === "panda" || form === "raccoon" || form === "bear") {
     const cream = mat(0xf2e6d0);
     ears(0.2, 0.2, 0.12, cream);
@@ -268,8 +327,9 @@ function heroWeapon(
     add(w, GEO.torus, gold, 0, 0.78, 0, 0.16, 0.16, 0.16, Math.PI / 2);
     add(w, GEO.octa, trim, 0, 0.78, 0, 0.12, 0.12, 0.12);
   } else if (kind === "blades" || kind === "scythe") {
-    add(w, GEO.box, gold, kind === "scythe" ? 0.05 : -0.18, 0.15, 0.1, 0.05, 0.7, 0.12);
-    if (kind === "blades") add(w, GEO.box, gold, 0.22, 0.15, 0.1, 0.05, 0.7, 0.12);
+    add(w, GEO.cyl, dark, 0, -0.05, 0.08, 0.03, 0.28, 0.03);
+    add(w, GEO.box, gold, 0, 0.28, 0.08, 0.05, 0.72, 0.11);
+    if (kind === "scythe") add(w, GEO.box, gold, 0.12, 0.55, 0.08, 0.28, 0.08, 0.08);
   } else if (kind === "coin" || kind === "orb") {
     add(w, GEO.cyl, gold, 0.05, 0.2, 0.15, 0.22, 0.05, 0.22, Math.PI / 2, 0, 0);
     add(w, GEO.octa, trim, 0.05, 0.2, 0.18, 0.1, 0.1, 0.04);
@@ -306,33 +366,62 @@ function heroWeapon(
 
 export function createEnemyMesh(kind: EnemyKind, tint = 0x6a3a88): THREE.Group {
   const g = new THREE.Group();
-  const body = mat(tint, { rough: 0.7, emissive: tint, eInt: 0.12 });
+  const body = mat(tint, { rough: 0.62, emissive: tint, eInt: 0.18 });
   const dark = mat(0x1a1018);
-  const gold = mat(0xd4af37, { metal: 0.8, rough: 0.25 });
+  const gold = mat(0xd4af37, { metal: 0.8, rough: 0.25, emissive: 0x3a2808, eInt: 0.2 });
+  const glow = mat(0xf2e8ff, { emissive: tint, eInt: 1.2 });
 
   if (kind === "wisp") {
-    add(g, GEO.sphere, body, 0, 0.55, 0, 0.32, 0.4, 0.32);
-    add(g, GEO.sphere, mat(0xf2e8ff, { emissive: 0xc8a0ff, eInt: 1.4 }), 0, 0.62, 0.18, 0.12, 0.12, 0.08);
+    add(g, GEO.sphereHi, body, 0, 0.62, 0, 0.28, 0.34, 0.28);
+    add(g, GEO.sphere, glow, 0, 0.7, 0.16, 0.14, 0.14, 0.1);
+    add(g, GEO.cone, body, 0, 0.28, 0, 0.16, 0.4, 0.16);
+    add(g, GEO.sphere, gold, -0.08, 0.72, 0.2, 0.035, 0.04, 0.03);
+    add(g, GEO.sphere, gold, 0.08, 0.72, 0.2, 0.035, 0.04, 0.03);
   } else if (kind === "scarab") {
-    add(g, GEO.sphere, body, 0, 0.28, 0, 0.38, 0.22, 0.5);
-    add(g, GEO.sphere, gold, 0, 0.38, 0.28, 0.18, 0.14, 0.18);
-    add(g, GEO.box, dark, -0.32, 0.32, 0, 0.08, 0.04, 0.5);
-    add(g, GEO.box, dark, 0.32, 0.32, 0, 0.08, 0.04, 0.5);
+    add(g, GEO.sphereHi, body, 0, 0.3, 0, 0.4, 0.22, 0.52);
+    add(g, GEO.sphere, gold, 0, 0.4, 0.3, 0.16, 0.12, 0.16);
+    add(g, GEO.sphere, dark, -0.08, 0.42, 0.4, 0.04, 0.04, 0.03);
+    add(g, GEO.sphere, dark, 0.08, 0.42, 0.4, 0.04, 0.04, 0.03);
+    for (const s of [-1, 1]) {
+      add(g, GEO.cyl, dark, s * 0.34, 0.22, 0.12, 0.035, 0.28, 0.035, 0, 0, s * 0.9);
+      add(g, GEO.cyl, dark, s * 0.34, 0.22, -0.08, 0.035, 0.28, 0.035, 0, 0, s * 0.9);
+      add(g, GEO.cyl, dark, s * 0.3, 0.22, -0.26, 0.03, 0.24, 0.03, 0, 0, s * 0.95);
+    }
   } else if (kind === "brute") {
-    add(g, GEO.box, body, 0, 0.7, 0, 0.9, 1.2, 0.7);
-    add(g, GEO.box, gold, 0, 1.2, 0.2, 0.7, 0.18, 0.5);
-    add(g, GEO.sphere, dark, -0.18, 1.15, 0.4, 0.1, 0.1, 0.08);
-    add(g, GEO.sphere, dark, 0.18, 1.15, 0.4, 0.1, 0.1, 0.08);
+    add(g, GEO.box, body, 0, 0.72, 0, 0.95, 1.15, 0.72);
+    add(g, GEO.box, gold, 0, 1.22, 0.18, 0.78, 0.2, 0.55);
+    add(g, GEO.sphereHi, dark, 0, 1.55, 0.08, 0.38, 0.32, 0.34);
+    add(g, GEO.cone, gold, -0.22, 1.82, 0, 0.06, 0.28, 0.06);
+    add(g, GEO.cone, gold, 0.22, 1.82, 0, 0.06, 0.28, 0.06);
+    add(g, GEO.sphere, glow, -0.12, 1.58, 0.32, 0.06, 0.06, 0.05);
+    add(g, GEO.sphere, glow, 0.12, 1.58, 0.32, 0.06, 0.06, 0.05);
+    add(g, GEO.box, dark, -0.55, 0.7, 0.1, 0.28, 0.9, 0.28);
+    add(g, GEO.box, dark, 0.55, 0.7, 0.1, 0.28, 0.9, 0.28);
   } else if (kind === "mage") {
-    add(g, GEO.cylR, body, 0, 0.55, 0, 0.32, 0.9, 0.32);
-    add(g, GEO.cone, dark, 0, 1.2, 0, 0.34, 0.5, 0.34);
-    add(g, GEO.sphere, mat(0xff6a40, { emissive: 0xff4010, eInt: 0.9 }), 0.28, 0.7, 0.2, 0.12, 0.12, 0.12);
+    add(g, GEO.cylR, body, 0, 0.55, 0, 0.34, 0.95, 0.34);
+    add(g, GEO.cone, dark, 0, 1.22, 0, 0.38, 0.55, 0.38);
+    add(g, GEO.sphereHi, dark, 0, 1.05, 0.08, 0.22, 0.2, 0.22);
+    add(g, GEO.sphere, glow, -0.08, 1.08, 0.22, 0.04, 0.045, 0.03);
+    add(g, GEO.sphere, glow, 0.08, 1.08, 0.22, 0.04, 0.045, 0.03);
+    add(g, GEO.cyl, gold, 0.32, 0.7, 0.12, 0.04, 1.05, 0.04);
+    add(g, GEO.sphere, mat(0xff6a40, { emissive: 0xff4010, eInt: 1.1 }), 0.32, 1.28, 0.12, 0.12, 0.14, 0.12);
+  } else if (kind === "court") {
+    add(g, GEO.box, body, 0, 0.78, 0, 0.82, 1.25, 0.62);
+    add(g, GEO.box, gold, 0, 1.35, 0.12, 0.7, 0.16, 0.5);
+    add(g, GEO.sphereHi, dark, 0, 1.62, 0.06, 0.32, 0.28, 0.3);
+    add(g, GEO.cone, gold, 0, 2.05, 0, 0.16, 0.42, 0.16);
+    add(g, GEO.sphere, glow, -0.1, 1.64, 0.28, 0.05, 0.05, 0.04);
+    add(g, GEO.sphere, glow, 0.1, 1.64, 0.28, 0.05, 0.05, 0.04);
+    add(g, GEO.box, dark, -0.48, 0.7, 0.08, 0.24, 0.95, 0.24);
+    add(g, GEO.box, dark, 0.48, 0.7, 0.08, 0.24, 0.95, 0.24);
+    add(g, GEO.box, gold, 0, 0.85, 0.34, 0.55, 0.7, 0.08);
   } else {
     add(g, GEO.box, gold, 0, 1.1, 0, 1.1, 2.0, 0.8);
   }
 
+  const barY = kind === "brute" || kind === "court" ? 2.15 : kind === "mage" ? 1.7 : kind === "scarab" ? 0.85 : 1.2;
   const bar = new THREE.Group();
-  bar.position.set(0, kind === "brute" ? 1.7 : kind === "mage" ? 1.6 : 1.15, 0);
+  bar.position.set(0, barY, 0);
   const bg = new THREE.Mesh(GEO.box, new THREE.MeshBasicMaterial({ color: 0x220808 }));
   bg.scale.set(0.7, 0.07, 0.07);
   const fg = new THREE.Mesh(GEO.box, new THREE.MeshBasicMaterial({ color: 0xc4453c }));
@@ -388,15 +477,51 @@ export function createAnubis(scale = 1, decorative = false): THREE.Group {
 export type Obstacle = { x: number; z: number; r: number };
 
 export async function loadTextures() {
+  const fallback = (hex: string) => {
+    const c = document.createElement("canvas");
+    c.width = 64;
+    c.height = 64;
+    const ctx = c.getContext("2d");
+    if (ctx) {
+      ctx.fillStyle = hex;
+      ctx.fillRect(0, 0, 64, 64);
+      ctx.fillStyle = "rgba(255,255,255,0.08)";
+      for (let i = 0; i < 8; i++) ctx.fillRect(i * 8, 0, 4, 64);
+    }
+    const t = new THREE.CanvasTexture(c);
+    t.wrapS = THREE.RepeatWrapping;
+    t.wrapT = THREE.RepeatWrapping;
+    t.colorSpace = THREE.SRGBColorSpace;
+    t.needsUpdate = true;
+    return t;
+  };
   const loader = new THREE.TextureLoader();
-  const load = (url: string) =>
-    new Promise<THREE.Texture>((resolve, reject) => {
-      loader.load(url, resolve, undefined, reject);
+  const load = (url: string, hex: string) =>
+    new Promise<THREE.Texture>((resolve) => {
+      let settled = false;
+      const done = (t: THREE.Texture) => {
+        if (settled) return;
+        settled = true;
+        resolve(t);
+      };
+      const timer = window.setTimeout(() => done(fallback(hex)), 4000);
+      loader.load(
+        url,
+        (t) => {
+          window.clearTimeout(timer);
+          done(t);
+        },
+        undefined,
+        () => {
+          window.clearTimeout(timer);
+          done(fallback(hex));
+        },
+      );
     });
   const [floor, sand, wall] = await Promise.all([
-    load("/textures/floor.jpg"),
-    load("/textures/sand.jpg"),
-    load("/textures/wall.jpg"),
+    load("/textures/floor.jpg", "#5a3828"),
+    load("/textures/sand.jpg", "#c4a574"),
+    load("/textures/wall.jpg", "#6a4030"),
   ]);
   for (const t of [floor, sand, wall]) {
     t.wrapS = THREE.RepeatWrapping;
@@ -411,7 +536,7 @@ export async function loadTextures() {
 
 export function createSandPlane(tex: THREE.Texture) {
   const m = new THREE.Mesh(
-    new THREE.PlaneGeometry(90, 90),
+    new THREE.PlaneGeometry(160, 160),
     new THREE.MeshStandardMaterial({ map: tex, roughness: 0.96, metalness: 0.04 }),
   );
   m.rotation.x = -Math.PI / 2;
@@ -425,9 +550,9 @@ export function createStarfield() {
   const n = 900;
   const pos = new Float32Array(n * 3);
   for (let i = 0; i < n; i++) {
-    pos[i * 3] = (Math.random() - 0.5) * 90;
-    pos[i * 3 + 1] = 6 + Math.random() * 22;
-    pos[i * 3 + 2] = (Math.random() - 0.5) * 90;
+    pos[i * 3] = (Math.random() - 0.5) * 160;
+    pos[i * 3 + 1] = 8 + Math.random() * 28;
+    pos[i * 3 + 2] = (Math.random() - 0.5) * 160;
   }
   geo.setAttribute("position", new THREE.BufferAttribute(pos, 3));
   const pts = new THREE.Points(
@@ -453,28 +578,45 @@ export function createDungeon(
   const group = new THREE.Group();
   const half = size / 2;
   const obstacles: Obstacle[] = [];
-
-  const floorTex = textures.floor.clone();
-  floorTex.wrapS = floorTex.wrapT = THREE.RepeatWrapping;
-  floorTex.repeat.set(size / 1.7, size / 1.7);
-  floorTex.needsUpdate = true;
-  const floor = new THREE.Mesh(
-    new THREE.PlaneGeometry(size, size),
-    new THREE.MeshStandardMaterial({
-      map: floorTex,
-      roughness: 0.5,
-      metalness: 0.22,
-      emissive: 0x4a1820,
-      emissiveIntensity: 0.22,
-    }),
-  );
-  floor.rotation.x = -Math.PI / 2;
-  floor.receiveShadow = true;
-  group.add(floor);
+  const TILE = size / 3;
 
   const wallMat = new THREE.MeshStandardMaterial({ map: textures.wall, roughness: 0.78, metalness: 0.12 });
-  const wallH = 2.35;
-  const thick = 0.6;
+  const gold = mat(0xd4af37, { metal: 0.85, rough: 0.22, emissive: 0x3a2808, eInt: 0.18 });
+  const stone = mat(0x5a3828, { rough: 0.82 });
+  const grout = mat(0xc9a227, { metal: 0.7, rough: 0.35, emissive: 0x3a2808, eInt: 0.12 });
+
+  for (let ix = 0; ix < 3; ix++) {
+    for (let iz = 0; iz < 3; iz++) {
+      const fx = (ix - 1) * TILE;
+      const fz = (iz - 1) * TILE;
+      const floorTex = textures.floor.clone();
+      floorTex.wrapS = floorTex.wrapT = THREE.RepeatWrapping;
+      floorTex.repeat.set(TILE / 1.7, TILE / 1.7);
+      floorTex.needsUpdate = true;
+      const center = ix === 1 && iz === 1;
+      const floor = new THREE.Mesh(
+        new THREE.PlaneGeometry(TILE - 0.18, TILE - 0.18),
+        new THREE.MeshStandardMaterial({
+          map: floorTex,
+          roughness: 0.5,
+          metalness: center ? 0.28 : 0.18,
+          emissive: center ? 0x5a1c28 : 0x3a1420,
+          emissiveIntensity: center ? 0.28 : 0.16,
+        }),
+      );
+      floor.rotation.x = -Math.PI / 2;
+      floor.position.set(fx, 0, fz);
+      floor.receiveShadow = true;
+      group.add(floor);
+    }
+  }
+  for (const t of [-TILE / 2, TILE / 2]) {
+    add(group, GEO.box, grout, t, 0.02, 0, 0.16, 0.04, size);
+    add(group, GEO.box, grout, 0, 0.02, t, size, 0.04, 0.16);
+  }
+
+  const wallH = 2.55;
+  const thick = 0.7;
   const wall = (x: number, z: number, sx: number, sz: number) => {
     const m = new THREE.Mesh(GEO.box, wallMat);
     m.position.set(x, wallH / 2, z);
@@ -488,42 +630,50 @@ export function createDungeon(
   wall(-half - thick / 2, 0, thick, size);
   wall(half + thick / 2, 0, thick, size);
 
-  const gold = mat(0xd4af37, { metal: 0.85, rough: 0.22, emissive: 0x3a2808, eInt: 0.18 });
-  const stone = mat(0x5a3828, { rough: 0.82 });
   const seed = (s: number) => {
     const x = Math.sin(s * 12.9898 + room * 78.233) * 43758.5453;
     return x - Math.floor(x);
   };
-  const count = 3 + (room % 4);
+  const joints: [number, number][] = [
+    [-TILE / 2, -TILE / 2],
+    [TILE / 2, -TILE / 2],
+    [-TILE / 2, TILE / 2],
+    [TILE / 2, TILE / 2],
+  ];
+  for (const [x, z] of joints) {
+    add(group, GEO.cyl, stone, x, 0.85, z, 0.38, 1.7, 0.38);
+    add(group, GEO.cyl, gold, x, 1.72, z, 0.46, 0.12, 0.46);
+    obstacles.push({ x, z, r: 0.52 });
+  }
+
+  const count = 4 + (room % 3);
   for (let i = 0; i < count; i++) {
     const a = seed(i * 3.17) * Math.PI * 2;
-    const d = 2.4 + seed(i * 9.1) * (half - 4.2);
+    const d = 6 + seed(i * 9.1) * (half - 9);
     const x = Math.cos(a) * d;
     const z = Math.sin(a) * d;
-    if (Math.hypot(x, z) < 2.4) continue;
+    if (Math.hypot(x, z) < 4.2) continue;
+    if (obstacles.some((o) => Math.hypot(o.x - x, o.z - z) < 2.2)) continue;
     add(group, GEO.cyl, stone, x, 0.7, z, 0.42, 1.4, 0.42);
     add(group, GEO.cyl, gold, x, 1.42, z, 0.48, 0.12, 0.48);
     obstacles.push({ x, z, r: 0.55 });
   }
 
   const corners: [number, number][] = [
-    [-half + 1.15, -half + 1.15],
-    [half - 1.15, -half + 1.15],
-    [-half + 1.15, half - 1.15],
-    [half - 1.15, half - 1.15],
+    [-half + 1.4, -half + 1.4],
+    [half - 1.4, -half + 1.4],
+    [-half + 1.4, half - 1.4],
+    [half - 1.4, half - 1.4],
+    [-half + 1.4, 0],
+    [half - 1.4, 0],
+    [0, -half + 1.4],
+    [0, half - 1.4],
   ];
   const fire = mat(0xff6a20, { emissive: 0xff4010, eInt: 1.15, rough: 0.4 });
   for (const [x, z] of corners) {
-    add(group, GEO.cyl, gold, x, 0.38, z, 0.16, 0.76, 0.16);
-    add(group, GEO.sphere, fire, x, 0.92, z, 0.14, 0.18, 0.14);
-    obstacles.push({ x, z, r: 0.32 });
-  }
-
-  if (room % 5 === 0) {
-    const statue = createAnubis(0.35, true);
-    statue.position.set(0, 0, -half + 1.6);
-    group.add(statue);
-    obstacles.push({ x: 0, z: -half + 1.6, r: 0.7 });
+    add(group, GEO.cyl, gold, x, 0.42, z, 0.16, 0.84, 0.16);
+    add(group, GEO.sphere, fire, x, 1.0, z, 0.15, 0.2, 0.15);
+    obstacles.push({ x, z, r: 0.34 });
   }
 
   return { group, obstacles, half };

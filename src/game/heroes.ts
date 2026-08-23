@@ -31,6 +31,9 @@ export type HeroDef = {
   startShield: number;
   startOrbits: number;
   startPierce: number;
+  ability?: string;
+  abilityBlurb?: string;
+  abilityCd?: number;
 };
 
 function h(def: HeroDef): HeroDef {
@@ -46,8 +49,9 @@ export const HEROES: HeroDef[] = [
     meaning: "Beginnings, spontaneity, unlimited potential.",
     color: 0x6b3fd4, accent: 0xe0c56a, portrait: "/cards/fool.jpg",
     hp: 92, speed: 7.4, fireRate: 0.26, damage: 13, shots: 1, projectileSpeed: 18,
-    passive: "15% chance to fire a bonus wildcard shot.",
+    passive: "Wildcard shots. Leap of Faith hurls a ring of chaos cards.",
     burn: false, wildcard: true, vamp: 0, goldMul: 1, startShield: 0, startOrbits: 0, startPierce: 0,
+    ability: "Leap of Faith", abilityBlurb: "Wild card ring + a burst of speed.", abilityCd: 5.5,
   }),
   h({
     id: "swords", pack: "circle", roman: "⚔", name: "Swords", title: "Swords · Air",
@@ -57,8 +61,9 @@ export const HEROES: HeroDef[] = [
     meaning: "Intellect, truth, conflict, decision.",
     color: 0x2a5aa8, accent: 0xc0d4ff, portrait: "/cards/swords.jpg",
     hp: 88, speed: 6.8, fireRate: 0.22, damage: 11, shots: 2, projectileSpeed: 22,
-    passive: "Starts with dual shot. Projectiles fly faster.",
-    burn: false, wildcard: false, vamp: 0, goldMul: 1, startShield: 0, startOrbits: 0, startPierce: 0,
+    passive: "Dual shot that pierces. Clarity Cut throws a piercing volley.",
+    burn: false, wildcard: false, vamp: 0, goldMul: 1, startShield: 0, startOrbits: 0, startPierce: 1,
+    ability: "Clarity Cut", abilityBlurb: "A twin piercing volley that cuts through the pack.", abilityCd: 6,
   }),
   h({
     id: "pentacles", pack: "circle", roman: "★", name: "Pentacles", title: "Pentacles · Earth",
@@ -68,8 +73,9 @@ export const HEROES: HeroDef[] = [
     meaning: "Material world, prosperity, manifestation.",
     color: 0x3d8b4a, accent: 0xe8c456, portrait: "/cards/pentacles.jpg",
     hp: 110, speed: 5.6, fireRate: 0.3, damage: 15, shots: 1, projectileSpeed: 16,
-    passive: "Enemies drop 40% more gold.",
+    passive: "40% more gold. Hits mint coins. Manifest bursts pentacles.",
     burn: false, wildcard: false, vamp: 0, goldMul: 1.4, startShield: 0, startOrbits: 0, startPierce: 0,
+    ability: "Manifest", abilityBlurb: "A pentacle nova. Hits can mint extra gold.", abilityCd: 7,
   }),
   h({
     id: "wands", pack: "circle", roman: "🔥", name: "Wands", title: "Wands · Fire",
@@ -79,30 +85,33 @@ export const HEROES: HeroDef[] = [
     meaning: "Creativity, willpower, action.",
     color: 0xc43c1c, accent: 0xffb040, portrait: "/cards/wands.jpg",
     hp: 96, speed: 6.2, fireRate: 0.28, damage: 17, shots: 1, projectileSpeed: 17,
-    passive: "Shots burn. Enemies take damage over time.",
+    passive: "Shots burn and can spread. Willfire is a ring of flame cards.",
     burn: true, wildcard: false, vamp: 0, goldMul: 1, startShield: 0, startOrbits: 0, startPierce: 0,
+    ability: "Willfire", abilityBlurb: "A burning ring of wands. Fire leaps between foes.", abilityCd: 6.5,
   }),
   h({
     id: "cups", pack: "circle", roman: "C", name: "Cups", title: "Cups · Water",
-    animal: "Raven", form: "raven", element: "Water", suit: "Cups",
+    animal: "Turtle", form: "turtle", element: "Water", suit: "Cups",
     weapon: "Sacred Chalice", weaponKind: "chalice",
     phrase: "I hold space for all. Love is my invocation.",
     meaning: "Emotion, intuition, healing.",
     color: 0x2a6db5, accent: 0xdce9ff, portrait: "/cards/cups.jpg",
     hp: 100, speed: 5.8, fireRate: 0.32, damage: 12, shots: 1, projectileSpeed: 16,
-    passive: "8% lifesteal on every hit.",
+    passive: "8% lifesteal and splash. Chalice Tide heals and shoves the room.",
     burn: false, wildcard: false, vamp: 0.08, goldMul: 1, startShield: 0, startOrbits: 0, startPierce: 0,
+    ability: "Chalice Tide", abilityBlurb: "Heal, knock foes back, splash water cards.", abilityCd: 7.5,
   }),
   h({
     id: "world", pack: "circle", roman: "XXI", name: "The World", title: "XXI · The World",
-    animal: "Rabbit", form: "panda", element: "Cosmos", suit: "Major Arcana",
+    animal: "Dragon", form: "dragon", element: "Cosmos", suit: "Major Arcana",
     weapon: "Twin Batons", weaponKind: "batons",
     phrase: "I unite all paths. The circle is complete.",
     meaning: "Completion, unity, wholeness.",
     color: 0xc9a227, accent: 0xffffff, portrait: "/cards/world.jpg",
     hp: 104, speed: 6.3, fireRate: 0.25, damage: 14, shots: 1, projectileSpeed: 18,
-    passive: "Starts with two orbiting shards.",
+    passive: "Two orbiting shards. The Circle Completes fires every suit at once.",
     burn: false, wildcard: false, vamp: 0, goldMul: 1, startShield: 0, startOrbits: 2, startPierce: 0,
+    ability: "The Circle Completes", abilityBlurb: "A ring of every suit. All paths, one volley.", abilityCd: 8,
   }),
   h({
     id: "earth", pack: "circle", roman: "🜃", name: "Earth Suit", title: "Earth Suit · Pentacles",
@@ -128,7 +137,7 @@ export const HEROES: HeroDef[] = [
   }),
 
   h({
-    id: "wanderer", pack: "major", roman: "0", name: "The Fool", title: "0 · The Fool",
+    id: "wanderer", pack: "major", roman: "0", name: "The Wanderer", title: "0 · The Wanderer",
     animal: "Fox", form: "fox", element: "Aether", suit: "Major Arcana",
     weapon: "Wanderer's Staff", weaponKind: "staff",
     phrase: "Leap without fear. The path is what I become.",
@@ -373,7 +382,18 @@ export const HEROES: HeroDef[] = [
 
 export const CIRCLE_HEROES = HEROES.filter((x) => x.pack === "circle");
 export const MAJOR_HEROES = HEROES.filter((x) => x.pack === "major");
+const STORY_BOSSES = [
+  ...MAJOR_HEROES.filter((h) => h.id !== "wanderer"),
+  MAJOR_HEROES.find((h) => h.id === "wanderer")!,
+];
 
 export const HERO_BY_ID: Record<HeroId, HeroDef> = Object.fromEntries(
   HEROES.map((hero) => [hero.id, hero]),
 ) as Record<HeroId, HeroDef>;
+
+export const PLAYABLE_IDS: HeroId[] = ["fool", "swords", "pentacles", "wands", "cups", "world"];
+export const PLAYABLE_HEROES = PLAYABLE_IDS.map((id) => HERO_BY_ID[id]);
+
+export function storyBoss(room: number) {
+  return STORY_BOSSES[(Math.max(1, room) - 1) % STORY_BOSSES.length]!;
+}
