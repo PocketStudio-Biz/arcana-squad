@@ -45,3 +45,25 @@ jobs:
           cache: npm
       - run: npm ci
       - run: node scripts/poc-10-static-review.mjs
+
+  boss-runtime:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npx playwright install --with-deps chromium
+      - name: Start Vite
+        run: |
+          npm run dev > /tmp/poc10-vite.log 2>&1 &
+          for i in $(seq 1 30); do
+            if curl --fail --silent http://127.0.0.1:8080 >/dev/null; then exit 0; fi
+            sleep 1
+          done
+          cat /tmp/poc10-vite.log
+          exit 1
+      - run: node scripts/poc-10-runtime-review.mjs
