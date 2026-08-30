@@ -10,40 +10,38 @@ permissions:
   contents: read
 
 jobs:
-  review:
+  typecheck:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Setup Node
-        uses: actions/setup-node@v4
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
         with:
           node-version: 22
           cache: npm
+      - run: npm ci
+      - run: npm run typecheck
 
-      - name: Install dependencies
-        run: npm ci
+  tests:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm test
 
-      - name: Typecheck
-        id: typecheck
-        continue-on-error: true
-        run: npm run typecheck
-
-      - name: Tests
-        id: tests
-        continue-on-error: true
-        run: npm test
-
-      - name: POC-10 source gate
-        id: poc10
-        continue-on-error: true
-        run: node scripts/poc-10-static-review.mjs
-
-      - name: Enforce review gate
-        if: always()
-        run: |
-          test "${{ steps.typecheck.outcome }}" = "success"
-          test "${{ steps.tests.outcome }}" = "success"
-          test "${{ steps.poc10.outcome }}" = "success"
+  poc10-source:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: node scripts/poc-10-static-review.mjs
