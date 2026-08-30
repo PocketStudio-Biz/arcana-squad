@@ -27,10 +27,23 @@ jobs:
         run: npm ci
 
       - name: Typecheck
+        id: typecheck
+        continue-on-error: true
         run: npm run typecheck
 
       - name: Tests
+        id: tests
+        continue-on-error: true
         run: npm test
 
       - name: POC-10 source gate
+        id: poc10
+        continue-on-error: true
         run: node scripts/poc-10-static-review.mjs
+
+      - name: Enforce review gate
+        if: always()
+        run: |
+          test "${{ steps.typecheck.outcome }}" = "success"
+          test "${{ steps.tests.outcome }}" = "success"
+          test "${{ steps.poc10.outcome }}" = "success"
