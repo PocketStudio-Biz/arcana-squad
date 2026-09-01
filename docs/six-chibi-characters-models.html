@@ -1,0 +1,609 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Arcana Squad — Six-Path Pixel-Fantasy Tarot</title>
+<style>
+  :root{
+    --ink:#0b0c10; --surface:#12141b; --panel:#171a22; --edge:#262b36;
+    --brass:#c9a227; --brass-dim:#8a6f1c; --paper:#e8e3d3; --paper-dim:#9a957f;
+  }
+  *{box-sizing:border-box; margin:0; padding:0}
+  html,body{height:100%}
+  body{
+    background:
+      radial-gradient(1200px 700px at 70% -10%, rgba(60,72,120,.18), transparent 60%),
+      radial-gradient(900px 600px at 10% 110%, rgba(120,60,20,.10), transparent 55%),
+      var(--ink);
+    color:var(--paper); font-family:Georgia,Cambria,serif; -webkit-font-smoothing:antialiased;
+    min-height:100%;
+  }
+  header{padding:22px 30px 10px; border-bottom:1px solid var(--edge);
+    background:linear-gradient(180deg, rgba(255,255,255,.02), transparent)}
+  h1{font-size:26px; letter-spacing:6px; text-transform:uppercase; color:var(--paper); font-weight:600}
+  h1 .amper{color:var(--brass)}
+  .sub{color:var(--paper-dim); font-size:12px; letter-spacing:3px; text-transform:uppercase; margin-top:6px}
+  nav{display:flex; gap:6px; flex-wrap:wrap; padding:14px 30px; border-bottom:1px solid var(--edge)}
+  nav button{background:transparent; border:1px solid transparent; color:var(--paper-dim);
+    font-family:inherit; font-size:12px; letter-spacing:2px; text-transform:uppercase;
+    padding:8px 14px; cursor:pointer; border-radius:3px; transition:.15s}
+  nav button:hover{color:var(--paper)}
+  nav button.active{color:#0b0c10; background:var(--brass); border-color:var(--brass)}
+  main{padding:24px 30px 60px; max-width:1180px; margin:0 auto}
+  .viewer{background:var(--surface); border:1px solid var(--edge); border-radius:8px;
+    box-shadow:0 18px 60px rgba(0,0,0,.5); overflow:hidden}
+  .viewer-top{display:flex; justify-content:space-between; align-items:center; padding:14px 18px; border-bottom:1px solid var(--edge)}
+  .plate{font-size:11px; letter-spacing:2px; text-transform:uppercase; color:var(--paper-dim)}
+  .plate b{color:var(--brass)}
+  .dl{display:flex; gap:8px}
+  .dl button{background:transparent; border:1px solid var(--brass-dim); color:var(--paper);
+    font-family:inherit; font-size:11px; letter-spacing:1px; text-transform:uppercase;
+    padding:7px 12px; border-radius:3px; cursor:pointer; transition:.15s}
+  .dl button:hover{background:var(--brass); color:#0b0c10; border-color:var(--brass)}
+  .stage{position:relative; width:100%; height:560px; cursor:grab; touch-action:none}
+  .stage:active{cursor:grabbing}
+  canvas.stage-canvas{position:absolute; inset:0; width:100%; height:100%; display:block}
+  .hint{position:absolute; bottom:12px; right:14px; color:var(--paper-dim); font-size:10px; letter-spacing:2px; text-transform:uppercase; pointer-events:none}
+  .plaque{display:flex; gap:20px; align-items:center; padding:18px; border-top:1px solid var(--edge); background:var(--panel)}
+  .suit-orb{width:40px; height:40px; border-radius:50%; border:2px solid var(--brass); flex:0 0 auto; box-shadow:0 0 18px rgba(201,162,39,.35)}
+  .plaque-main{flex:1 1 auto}
+  .plaque-main h2{font-size:20px; letter-spacing:3px; text-transform:uppercase}
+  .plaque-main .arcanum{color:var(--brass); font-size:11px; letter-spacing:4px; text-transform:uppercase; margin-top:4px}
+  .plaque-main p{margin-top:8px; color:var(--paper-dim); font-size:13px; line-height:1.55}
+  .fam{display:flex; gap:10px; flex-wrap:wrap; margin-top:10px}
+  .tag{font-size:10px; letter-spacing:1px; text-transform:uppercase; border:1px solid var(--edge); padding:4px 9px; border-radius:20px; color:var(--paper-dim)}
+  .tag b{color:var(--paper)}
+  .id-panel{flex:0 0 auto; display:grid; gap:3px; height:8px}
+  .id-panel i{background:var(--paper-dim); opacity:.25}
+  .id-panel i.hi{opacity:1}
+  .index{display:grid; grid-template-columns:repeat(auto-fill,minmax(150px,1fr)); gap:14px; margin-top:26px}
+  .card{background:var(--surface); border:1px solid var(--edge); border-radius:6px; padding:16px 14px;
+    cursor:pointer; transition:.15s; text-align:center}
+  .card:hover{border-color:var(--brass-dim); transform:translateY(-2px)}
+  .card .sw{width:52px; height:62px; margin:0 auto 10px; border-radius:4px; border:2px solid var(--brass);
+    background:linear-gradient(160deg,#1a1d26,#101319); display:flex; align-items:center; justify-content:center;
+    font-size:9px; letter-spacing:1px; color:var(--paper-dim); text-transform:uppercase; position:relative}
+  .card .sw i{position:absolute; display:block; border-radius:50%}
+  .card .sw .sym{position:relative; z-index:2}
+  .card h3{font-size:13px; letter-spacing:1px; text-transform:uppercase}
+  .card .arc{font-size:10px; color:var(--brass); text-transform:uppercase; letter-spacing:1px; margin-top:3px}
+  footer{margin-top:40px; color:var(--paper-dim); font-size:11px; letter-spacing:1px; text-transform:uppercase; text-align:center; padding-bottom:30px}
+  .legend{display:flex; gap:18px; flex-wrap:wrap; justify-content:center}
+  .legend span{display:inline-flex; align-items:center; gap:6px}
+  .legend i.s{width:10px; height:10px; border-radius:50%; display:inline-block}
+  @media(max-width:600px){
+    main{padding:14px 14px 40px} nav{padding:10px 14px} .stage{height:420px}
+    .viewer-top{align-items:flex-start; flex-direction:column; gap:10px}
+    .plaque{flex-direction:column; align-items:flex-start}
+  }
+</style>
+</head>
+<body>
+<header>
+  <h1>Arcana <span class="amper">&amp;</span> Squad</h1>
+  <div class="sub">Six-Path Pixel-Fantasy Tarot &middot; Museum Collection</div>
+</header>
+
+<nav id="nav"></nav>
+
+<main>
+  <section class="viewer" id="viewer">
+    <div class="viewer-top">
+      <div class="plate"><b id="plateNum"></b> &middot; <span id="plateName"></span></div>
+      <div class="dl">
+        <button id="dlObj">OBJ + MTL</button>
+        <button id="dlGlb">GLB</button>
+      </div>
+    </div>
+    <div class="stage" id="stage">
+      <canvas class="stage-canvas" id="cv"></canvas>
+      <div class="hint">drag orbit &middot; wheel zoom</div>
+    </div>
+    <div class="plaque">
+      <div class="suit-orb" id="suitOrb"></div>
+      <div class="plaque-main">
+        <h2 id="title"></h2>
+        <div class="arcanum" id="arcanum"></div>
+        <p id="desc"></p>
+        <div class="fam" id="tags"></div>
+      </div>
+      <div class="id-panel" id="idPanel"></div>
+    </div>
+  </section>
+
+  <section class="index" id="index"></section>
+
+  <footer><div class="legend" id="legend"></div></footer>
+</main>
+
+<script>
+"use strict";
+
+/* ================= vector helpers ================= */
+const V3={
+  sub:(a,b)=>[a[0]-b[0],a[1]-b[1],a[2]-b[2]],
+  cross:(a,b)=>[a[1]*b[2]-a[2]*b[1], a[2]*b[0]-a[0]*b[2], a[0]*b[1]-a[1]*b[0]],
+  dot:(a,b)=>a[0]*b[0]+a[1]*b[1]+a[2]*b[2],
+  len:a=>Math.hypot(a[0],a[1],a[2]),
+  norm:a=>{const l=V3.len(a)||1;return[a[0]/l,a[1]/l,a[2]/l]}
+};
+const HEX=h=>{const n=parseInt(h.slice(1),16);return[(n>>16&255)/255,(n>>8&255)/255,(n&255)/255]};
+
+/* ================= mesh (triangle soup) ================= */
+class Mesh{
+  constructor(colors){this.tris=[];this.colors=colors||[];}
+  push(v,c){this.tris.push({v:c?[v[0],v[1],v[2]]:v,c:this.colors[c]});}
+  box(cx,cy,cz,sx,sy,sz,ci){
+    const x0=cx-sx/2,x1=cx+sx/2,y0=cy-sy/2,y1=cy+sy/2,z0=cz-sz/2,z1=cz+sz/2;
+    const V=[[x0,y0,z1],[x1,y0,z1],[x1,y1,z1],[x0,y1,z1],[x0,y0,z0],[x1,y0,z0],[x1,y1,z0],[x0,y1,z0]];
+    const F=[[0,1,2,3],[5,4,7,6],[4,0,3,7],[1,5,6,2],[3,2,6,7],[4,5,1,0]];
+    const col=this.colors[ci];
+    F.forEach(q=>{
+      this.tris.push({v:[V[q[0]],V[q[1]],V[q[2]]],c:col});
+      this.tris.push({v:[V[q[0]],V[q[2]],V[q[3]]],c:col});
+    });
+  }
+  cyl(y0,y1,r0,r1,n,ci,caps){
+    const col=this.colors[ci];
+    for(let k=0;k<n;k++){
+      const a1=k/n*Math.PI*2,a2=(k+1)/n*Math.PI*2;
+      const x1=Math.cos(a1)*r0,z1=Math.sin(a1)*r0,x2=Math.cos(a2)*r0,z2=Math.sin(a2)*r0;
+      const x3=Math.cos(a2)*r1,z3=Math.sin(a2)*r1,x4=Math.cos(a1)*r1,z4=Math.sin(a1)*r1;
+      this.tris.push({v:[[x1,y0,z1],[x2,y0,z2],[x3,y1,z3]],c:col});
+      this.tris.push({v:[[x1,y0,z1],[x3,y1,z3],[x4,y1,z4]],c:col});
+    }
+    if(caps!==false){
+      for(let k=0;k<n;k++){
+        const a1=k/n*Math.PI*2,acc=(k+1)%n/n*Math.PI*2;
+        const x1=Math.cos(a1)*r1,z1=Math.sin(a1)*r1,x2=Math.cos(acc)*r1,z2=Math.sin(acc)*r1;
+        this.tris.push({v:[[0,y1,0],[x2,y1,z2],[x1,y1,z1]],c:col});
+      }
+    }
+  }
+  // low-poly sphere. skip poles to reduce degenerate tris
+  sphere(cx,cy,cz,r,ci){
+    const la=8,lo=11,col=this.colors[ci];
+    for(let p=1;p<la-1;p++){
+      const a1=p/la*Math.PI,a2=(p+1)/la*Math.PI;
+      for(let q=0;q<lo;q++){
+        const b1=q/lo*Math.PI*2,b2=(q+1)/lo*Math.PI*2;
+        const v0=[cx+r*Math.sin(a1)*Math.cos(b1),cy+r*Math.cos(a1),cz+r*Math.sin(a1)*Math.sin(b1)];
+        const v1=[cx+r*Math.sin(a1)*Math.cos(b2),cy+r*Math.cos(a1),cz+r*Math.sin(a1)*Math.sin(b2)];
+        const v2=[cx+r*Math.sin(a2)*Math.cos(b2),cy+r*Math.cos(a2),cz+r*Math.sin(a2)*Math.sin(b2)];
+        const v3=[cx+r*Math.sin(a2)*Math.cos(b1),cy+r*Math.cos(a2),cz+r*Math.sin(a2)*Math.sin(b1)];
+        this.tris.push({v:[v0,v1,v2],c:col});this.tris.push({v:[v0,v2,v3],c:col});
+      }
+    }
+  }
+  cone(cx,cy,cz,r,h,ci){
+    const n=11,col=this.colors[ci],top=[cx,cy+h,cz];
+    for(let k=0;k<n;k++){
+      const a1=k/n*Math.PI*2,a2=(k+1)/n*Math.PI*2;
+      const x1=cx+Math.cos(a1)*r,z1=cz+Math.sin(a1)*r;
+      const x2=cx+Math.cos(a2)*r,z2=cz+Math.sin(a2)*r;
+      this.tris.push({v:[[cx,cy,cz],[x2,cy,z2],[x1,cy,z1]],c:col});
+      this.tris.push({v:[[x1,cy,z1],[x2,cy,z2],top],c:col});
+    }
+  }
+  quad(pts,ci){ // double-sided flat quad
+    const col=this.colors[ci];
+    this.tris.push({v:[pts[0],pts[1],pts[2]],c:col});
+    this.tris.push({v:[pts[0],pts[2],pts[3]],c:col});
+    this.tris.push({v:[pts[2],pts[1],pts[0]],c:col});
+    this.tris.push({v:[pts[3],pts[2],pts[0]],c:col});
+  }
+}
+
+/* ================= shared chibi bits ================= */
+function mkPal(prime,accent,skin,fur,extra){
+  return {robe:HEX(prime),trim:HEX(accent),skin:HEX(skin),fur:HEX(fur),eye:HEX('#0b0c10'),
+    gold:HEX(accent),...((extra&&{extra:extra})||{})};
+}
+function eyes(m,P,cy,zscale){ // zoffset head front
+  const z=0.46;
+  m.box(-0.17,cy,z,0.17,0.13,0.04,P.eye);
+  m.box( 0.17,cy,z,0.17,0.13,0.04,P.eye);
+  m.box(-0.15,cy+0.02,z+0.04,0.05,0.05,0.05,P.gold);
+  m.box( 0.15,cy+0.02,z+0.04,0.05,0.05,0.05,P.gold);
+}
+function robeHead(m,P,headC,headR,robeBotCol){ // robe + collar + head
+  m.cyl(0,1.05,0.95,0.52,12,robeBotCol);
+  m.cyl(1.05,headC-headR*0.5,0.52,0.4,10,P.trim);
+  m.sphere(0,headC,0,headR,P.skin);
+}
+function faceBits(m,P,headC,headR){
+  eyes(m,P,headC+headR*0.1);
+  m.box(0,headC-headR*0.32,headR*0.92,0.12,0.03,0.03,P.gold); // mouth
+}
+
+/* ================= the six characters ================= */
+function buildFool(){
+  const P=mkPal('#6a48c4','#d4af37','#b7855f','#8a5a2b');
+  const m=new Mesh([P.robe,P.trim,P.skin,P.fur,P.eye,P.gold]);
+  const C=m.colors;
+  const headC=1.42,headR=0.5;
+  robeHead(m,P,headC,headR,0);
+  m.sphere(0.24,headC+headR*0.7,0.05,0.11,2);   // otter left ear
+  m.sphere(-0.24,headC+headR*0.7,0.05,0.11,2);
+  m.box(0,headC-headR*0.15,headR*0.9,0.32,0.24,0.22,2); // otter snout
+  faceBits(m,P,headC,headR);
+  // star wand raised
+  m.cone(0.5,0.9,0.32,0.05,0.22,5);
+  m.cone(0.5,1.14,0.32,0.05,0.22,5);
+  m.sphere(0.5,1.26,0.32,0.14,5);
+  starOrb(m,[[0,1.98,0.55],[0.86,1.78,-0.5],[-0.86,1.72,0.4]],C);
+  // hood
+  m.cone(0,headC+headR*0.42,0,headR*0.85,0.34,0);
+  m.sphere(0,headC+0.22,0,headR*0.5,0);
+  return {m,id:0,num:'0',suit:'The Fool',name:'The Star Ascendant',
+    arc:'The Fool &mdash; Astral Otter Mage',color:'#6a48c4',
+    desc:'An otter mage robed in violet and gold, stargazer staff aloft, orbs of astral light orbiting like a living constellation.',
+    tags:[['Element','Astral'],['Familiar','Otter'],['Palette','Purple/Gold'],['Motif','Star']]};
+}
+function starOrb(m,pts,C){ pts.forEach(p=>m.sphere(p[0],p[1],p[2],0.08,5)); }
+
+function buildSwords(){
+  const P=mkPal('#2e6fd8','#d4af37','#c9a17b','#3b3f4a');
+  const m=new Mesh([P.robe,P.trim,P.skin,P.fur,P.eye,P.gold]);
+  const C=m.colors;
+  const headC=1.42,headR=0.52;
+  robeHead(m,P,headC,headR,0);
+  // feline pointed ears (gold-tipped)
+  m.cone(0.2,headC+headR*0.75,0.02,0.13,0.28,1);
+  m.cone(-0.2,headC+headR*0.75,0.02,0.13,0.28,1);
+  faceBits(m,P,headC,headR);
+  // dual glowing blades on either side, gold hilts
+  [[0.6,0.2,0.35],[-0.6,0.2,0.35]].forEach(s=>{
+    m.box(s[0],s[1]+0.75,s[2],0.07,1.55,0.16,1);
+    m.box(s[0],s[1]+0.78,s[2],0.12,0.14,0.22,5); // hilt ring
+  });
+  // wind crests
+  m.quad([[-0.8,1.0,-0.02],[-0.55,1.38,0.02],[-0.55,1.42,-0.36],[-0.8,1.06,-0.34]],1);
+  m.quad([[0.8,1.0,-0.02],[0.55,1.38,0.02],[0.55,1.42,-0.36],[0.8,1.06,-0.34]],1);
+  return {m,id:1,num:'Swords',suit:'Swords',name:'The Windblade Sentinel',
+    arc:'Swords &mdash; Twin-Blade Air Warrior',color:'#2e6fd8',
+    desc:'A blue-and-gold feline warrior with two glowing blades, sharp ears and wind-borne crests. Guarding air, clarity and the swift cut.',
+    tags:[['Suit','Swords'],['Familiar','Feline'],['Palette','Blue/Gold'],['Loadout','Dual Blade']]};
+}
+
+function buildPentacles(){
+  const P=mkPal('#3a9d4d','#d4af37','#e8dcbe','#c8a9e8');
+  const m=new Mesh([P.robe,P.trim,P.skin,P.fur,P.eye,P.gold]);
+  const C=m.colors;
+  const headC=1.42,headR=0.5;
+  robeHead(m,P,headC,headR,0);
+  // rabbit ears (long)
+  m.cone(0.15,headC+headR*0.7,0.04,0.09,0.75,2);
+  m.cone(0.15,headC+headR*1.35,0.04,0.05,0.5,3);
+  m.cone(-0.15,headC+headR*0.7,0.04,0.09,0.75,2);
+  m.cone(-0.15,headC+headR*1.35,0.04,0.05,0.5,3);
+  faceBits(m,P,headC,headR);
+  // chest pentacle (gold star)
+  pentacleStar(m,0,0.98,0.5,0.40,5);
+  // floating pentacle disc in hand
+  m.box(0.52,0.95,0.32,0.1,0.04,0.1,5);
+  pentacleStar(m,0.52,0.99,0.32,0.30,5);
+  return {m,id:2,num:'Pentacles',suit:'Pentacles',name:'The Rootward Sage',
+    arc:'Pentacles &mdash; Green Rabbit Earth Mage',color:'#3a9d4d',
+    desc:'A green-and-gold rabbit mage rooted to the earth, a five-point pentacle gleaming at the chest. Matter, growth and the slow wealth of soil.',
+    tags:[['Suit','Pentacles'],['Familiar','Rabbit'],['Palette','Green/Gold'],['Emblem','Pentacle']]};
+}
+function pentacleStar(m,cx,cy,cz,r,ci){
+  const pts=[]; for(let k=0;k<10;k++){
+    const ra=k%2===0?r:r*0.4, a=k*Math.PI/5-Math.PI/2;
+    pts.push([cx+Math.cos(a)*ra,cy+Math.sin(a)*ra,cz]);
+  }
+  for(let f=0;f<5;f++){
+    const A=pts[f*2],B=pts[f*2+1],C=pts[(f*2+2)%10];
+    m.push([A,B,C],ci);
+  }
+  const inn=[0,2,4,6,8].map(k=>pts[k]);
+}
+
+function buildWands(){
+  const P=mkPal('#c0392b','#d4af37','#3a3d44','#1c1e22');
+  const m=new Mesh([P.robe,P.trim,P.skin,P.fur,P.eye,P.gold]);
+  const C=m.colors;
+  const headC=1.42,headR=0.5;
+  robeHead(m,P,headC,headR,0);
+  // raven pale beak
+  m.cone(0,headC,headR*0.95,0.13,0.42,3);
+  m.box(0,headC-headR*0.15,headR*1.2,0.28,0.13,0.18,3);
+  faceBits(m,P,headC,headR);
+  // dark wings
+  m.quad([[-0.85,1.28,0.12],[-0.4,1.48,0.02],[-0.4,1.08,0.02],[-0.85,0.88,0.06]],0);
+  m.quad([[0.85,1.28,0.12],[0.4,1.48,0.02],[0.4,1.08,0.02],[0.85,0.88,0.06]],0);
+  // burning staff
+  m.cone(0.5,0.7,0.32,0.06,1.15,5);
+  flame(m,0.5,1.95,0.32,0.3,C);
+  // flame spirit companion
+  flame(m,-0.7,1.55,0.22,0.34,C);
+  return {m,id:3,num:'Wands',suit:'Wands',name:'The Emberhand Prophet',
+    arc:'Wands &mdash; Red Raven Fire Mage',color:'#c0392b',
+    desc:'A red-and-gold raven mage whose staff burns with living flame, a small fire spirit dancing at his shoulder. Wand, will and bright creation.',
+    tags:[['Suit','Wands'],['Familiar','Raven'],['Palette','Red/Gold'],['Familiar','Flame Spirit']]};
+}
+function flame(m,cx,cy,cz,r,C){
+  m.cone(cx,cy-r*0.2,cz,r*0.45,0.8,3);
+  m.cone(cx,cy+r*0.25,cz,r*0.34,0.9,5);
+  m.cone(cx,cy+r*0.7,cz,r*0.22,0.7,5);
+  m.sphere(cx,cy-r*0.1,cz,r*0.1,0);
+}
+
+function buildCups(){
+  const P=mkPal('#2f9dd6','#d4af37','#7fb069','#5b8a53');
+  const m=new Mesh([P.robe,P.trim,P.skin,P.fur,P.eye,P.gold]);
+  const C=m.colors;
+  const headC=1.5,headR=0.42;
+  m.cyl(0,1.1,0.95,0.58,12,0);
+  m.cyl(1.1,1.42,0.52,0.42,10,1);
+  // shell dome behind
+  m.sphere(0,1.05,-0.34,0.6,2);
+  m.sphere(0,1.05,-0.34,0.44,3);
+  // turtle head forward (small)
+  m.sphere(0,headC,headR+0.12,0.22,2);
+  m.sphere(0,headC,headR+0.24,0.1,3);
+  eyes(m,P,headC,headR+0.06);
+  // flippers
+  [[0.9,0.55,0.12],[-0.9,0.55,0.12],[0.82,0.35,-0.2],[-0.82,0.35,-0.2]].forEach(f=>m.sphere(f[0],f[1],f[2],0.15,2));
+  // gem cup in hand
+  m.cyl(0.5,0.7,0.34,0.16,0.32,10,5);
+  m.sphere(0.5,0.84,0.34,0.13,2);
+  m.sphere(0.5,0.88,0.34,0.06,5); // gem
+  return {m,id:4,num:'Cups',suit:'Cups',name:'The Tidekeeper',
+    arc:'Cups &mdash; Teal Turtle Water Healer',color:'#2f9dd6',
+    desc:'A teal-and-gold turtle healer cradling a cup of water with a glowing gem. Flowing, emotional and restorative; water that remembers.',
+    tags:[['Suit','Cups'],['Familiar','Turtle'],['Palette','Teal/Gold'],['Prop','Gem Cup']]};
+}
+
+function buildWorld(){
+  const P=mkPal('#e8e6df','#d4af37','#3f8f4d','#2c6a35');
+  const m=new Mesh([P.robe,P.trim,P.skin,P.fur,P.eye,P.gold]);
+  const C=m.colors;
+  const headC=1.5,headR=0.46;
+  m.cyl(0,1.1,0.95,0.52,12,0);
+  m.cyl(1.1,1.5,0.48,0.3,10,1);
+  m.sphere(0,headC,0,headR,2);
+  // dragon crest + horns
+  m.cone(0,headC+headR*0.7,0.06,0.14,0.3,2);
+  m.cone(0.16,headC+headR*0.95,-0.02,0.07,0.36,5);
+  m.cone(-0.16,headC+headR*0.95,-0.02,0.07,0.36,5);
+  faceBits(m,P,headC,headR);
+  // cosmic wings
+  m.quad([[-0.9,1.38,0.05],[-0.42,1.62,0.02],[-0.42,1.05,0.02],[-0.9,0.85,0.05]],3);
+  m.quad([[0.9,1.38,0.05],[0.42,1.62,0.02],[0.42,1.05,0.02],[0.9,0.85,0.05]],3);
+  // twin-orb staff
+  m.cone(0.55,0.6,0.3,0.06,1.75,5);
+  m.sphere(0.55,2.25,0.3,0.17,0);
+  m.sphere(0.55,2.0,0.3,0.17,3);
+  m.sphere(0.55,2.25,0.3,0.1,5);
+  // halo ring
+  m.box(0,1.62,-0.52,0.1,0.06,0.1,5);
+  return {m,id:5,num:'XXI',suit:'The World',name:'The Worldbringer',
+    arc:'XXI &middot; The World &mdash; Cosmic Priest Dragon',color:'#d4af37',
+    desc:'A white-and-gold dragon priest of the cosmos, twin orbs of creation on a golden staff, green wings spread like the edge of the world. Completion, wholeness, the song of everything.',
+    tags:[['Major','XXI'],['Familiar','Green Dragon'],['Palette','White/Gold'],['Staff','Twin-Orb']]};
+}
+
+const CHARACTERS=[buildFool(),buildSwords(),buildPentacles(),buildWands(),buildCups(),buildWorld()];
+function slugify(s){return s.toLowerCase().replace(/[^a-z0-9]+/g,'_')}
+
+/* ================= renderer ================= */
+const cv=document.getElementById('cv'), stage=document.getElementById('stage');
+const ctx=cv.getContext('2d');
+const W=720,H=560; cv.width=W; cv.height=H;
+const zb=new Float32Array(W*H);
+let img=ctx.createImageData(W,H);
+let cam={azi:0.85,ele:0.32,dist:6.2,target:[0,1.05,0]};
+let dragging=false,lx=0,ly=0,sel=0;
+const light=V3.norm([0.5,0.9,0.35]);
+
+function dot3(a,b){return a[0]*b[0]+a[1]*b[1]+a[2]*b[2]}
+function cross3(a,b){return[a[1]*b[2]-a[2]*b[1],a[2]*b[0]-a[0]*b[2],a[0]*b[1]-a[1]*b[0]]}
+function norm3(a){const l=Math.hypot(a[0],a[1],a[2])||1;return[a[0]/l,a[1]/l,a[2]/l]}
+function triArea(a,b,c){return((b[0]-a[0])*(c[1]-a[1])-(c[0]-a[0])*(b[1]-a[1]))}
+
+function camBasis(){
+  const t=cam.target,ce=Math.cos(cam.ele),se=Math.sin(cam.ele),ca=Math.cos(cam.azi),sa=Math.sin(cam.azi);
+  const px=t[0]+cam.dist*ce*sa, py=t[1]+cam.dist*se, pz=t[2]+cam.dist*ce*-ca;
+  const f=norm3([t[0]-px,t[1]-py,t[2]-pz]);
+  const s=norm3([-f[2],0,f[0]]);
+  const u=cross3(f,s);
+  return {px,py,pz,f,s,u, ca,sa,ce,se};
+}
+function toCam(p,B){
+  const x=p[0]-B.px,y=p[1]-B.py,z=p[2]-B.pz;
+  return[dot3([x,y,z],B.s),-dot3([x,y,z],B.u),dot3([x,y,z],B.f)];
+}
+/* return [sx,sy,viewX,viewY,viewZ] */
+function proj(p,B){
+  const v=toCam(p,B), vz=v[2];
+  if(vz<=0.01)return null;
+  const f=2.1;
+  const sx=(v[0]*f/vz+1)*0.5*W;
+  const sy=(1-(v[1]*-f/vz+1)*0.5)*H;
+  return[sx,sy,v[0],v[1],vz];
+}
+function raster(a,b,c,za,zb_,zc,R,G,B){
+  const minx=Math.max(0,Math.min(a[0],b[0],c[0])|0);
+  const maxx=Math.min(W-1,Math.max(a[0],b[0],c[0])|0);
+  const miny=Math.max(0,Math.min(a[1],b[1],c[1])|0);
+  const maxy=Math.min(H-1,Math.max(a[1],b[1],c[1])|0);
+  const area=triArea(a,b,c);
+  if(area===0)return;
+  for(let yy=miny;yy<=maxy;yy++){
+    const py=yy+0.5;
+    for(let xx=minx;xx<=maxx;xx++){
+      const px=xx+0.5;
+      const w0=((b[0]-a[0])*(py-a[1])-(b[1]-a[1])*(px-a[0]))/area;
+      const w1=((c[0]-b[0])*(py-b[1])-(c[1]-b[1])*(px-b[0]))/area;
+      const w2=1-w0-w1;
+      if(w0>=0&&w1>=0&&w2>=0){
+        const z=w2*za+w0*zb_+w1*zc;
+        const idx=yy*W+xx;
+        if(z<zb[idx]){
+          zb[idx]=z;
+          const pi=idx*4;
+          img.data[pi]=R;img.data[pi+1]=G;img.data[pi+2]=B;img.data[pi+3]=255;
+        }
+      }
+    }
+  }
+}
+function render(){
+  img.data.fill(0); zb.fill(1e9);
+  const B=camBasis();
+  drawPedestal(B);
+  const mesh=CHARACTERS[sel].m, P=mesh.colors;
+  mesh.tris.forEach(t=>{
+    const a=proj(t.v[0],B),b=proj(t.v[1],B),c=proj(t.v[2],B);
+    if(!a||!b||!c)return;
+    if(triArea([a[0],a[1]],[b[0],b[1]],[c[0],c[1]])<1)return;
+    const n=cross3(V3.sub(t.v[1],t.v[0]),V3.sub(t.v[2],t.v[0]));
+    const shade=0.45+0.55*Math.max(0,dot3(norm3(n),light));
+    const col=t.c;
+    raster(a,b,c,a[4],b[4],c[4],
+      (col[0]*shade*255)|0,(col[1]*shade*255)|0,(col[2]*shade*255)|0);
+  });
+  ctx.putImageData(img,0,0);
+}
+let pedestal=null;
+function drawPedestal(B){
+  if(!pedestal){const m=new Mesh([HEX('#8d8a80'),HEX('#23252b')]);
+    m.cyl(0,0.035,1.75,1.35,20,0,false);
+    m.cyl(0.035,0.12,1.05,0.95,20,1,false);
+    pedestal=m;}
+  pedestal.tris.forEach(t=>{
+    const a=proj(t.v[0],B),b=proj(t.v[1],B),c=proj(t.v[2],B);
+    if(!a||!b||!c)return;
+    if(triArea([a[0],a[1]],[b[0],b[1]],[c[0],c[1]])<1)return;
+    const n=cross3(V3.sub(t.v[1],t.v[0]),V3.sub(t.v[2],t.v[0]));
+    const shade=0.5+0.5*Math.max(0,dot3(norm3(n),light));
+    const flag=t.c;
+    raster(a,b,c,a[4],b[4],c[4],flag[0]*shade*255,flag[1]*shade*255,flag[2]*shade*255);
+  });
+}
+
+/* ================= UI ================= */
+const nav=document.getElementById('nav'),indexEl=document.getElementById('index'),legendEl=document.getElementById('legend');
+const el=id=>document.getElementById(id);
+
+function loadChar(i){
+  sel=i; const ch=CHARACTERS[i];
+  el('plateNum').textContent=ch.num; el('plateName').textContent=ch.suit;
+  el('title').textContent=ch.name; el('arcanum').innerHTML=ch.arc;
+  el('desc').textContent=ch.desc;
+  el('tags').innerHTML=ch.tags.map(t=>`<span class="tag"><b>${t[0]}</b> ${t[1]}</span>`).join('');
+  el('suitOrb').style.background=`radial-gradient(circle at 35% 30%, ${ch.color}, #101319)`;
+  const ip=el('idPanel'); ip.innerHTML='';
+  ip.style.gridTemplateColumns=ch.id===0?'1fr':`repeat(${CHARACTERS.length},1fr)`;
+  const count=ch.id===0?1:CHARACTERS.length;
+  for(let k=0;k<count;k++){const b=document.createElement('i');if(ch.id===k)b.classList.add('hi');ip.appendChild(b);}
+  [...nav.children].forEach((b,j)=>b.classList.toggle('active',j===i));
+  render();
+}
+function buildUI(){
+  nav.innerHTML='';
+  CHARACTERS.forEach((ch,i)=>{
+    const b=document.createElement('button'); b.textContent=`${ch.num} · ${ch.suit}`; b.onclick=()=>loadChar(i); nav.appendChild(b);
+  });
+  indexEl.innerHTML='';
+  CHARACTERS.forEach((ch,i)=>{
+    const c=document.createElement('div'); c.className='card';
+    c.onclick=()=>{loadChar(i);el('viewer').scrollIntoView({behavior:'smooth'});};
+    c.innerHTML=`<div class="sw" style="border-color:${ch.color}"><i style="background:${ch.color};width:14px;height:14px;left:19px;top:12px"></i><span class="sym">${ch===CHARACTERS[0]?'0':'✦'}</span></div>`;
+    const h=document.createElement('h3');h.textContent=ch.name;c.appendChild(h);
+    const a=document.createElement('div');a.className='arc';a.innerHTML=ch.arc;c.appendChild(a);
+    indexEl.appendChild(c);
+  });
+  legendEl.innerHTML=CHARACTERS.map(ch=>`<span><i class="s" style="background:${ch.color}"></i>${ch.num} ${ch.suit}</span>`).join('');
+  loadChar(0);
+}
+
+/* ================= input ================= */
+stage.addEventListener('pointerdown',e=>{stage.setPointerCapture(e.pointerId);dragging=true;lx=e.clientX;ly=e.clientY});
+stage.addEventListener('pointermove',e=>{if(!dragging)return;cam.azi+=(e.clientX-lx)*0.008;cam.ele=Math.max(0.08,Math.min(1.3,cam.ele+(e.clientY-ly)*0.008));lx=e.clientX;ly=e.clientY;render();});
+function up(){dragging=false;}
+stage.addEventListener('pointerup',up);stage.addEventListener('pointercancel',up);
+stage.addEventListener('wheel',e=>{e.preventDefault();cam.dist=Math.max(2.8,Math.min(10,cam.dist*Math.pow(1.0015,e.deltaY)));render();},{passive:false});
+window.addEventListener('resize',()=>{cv.width=W;cv.height=H;img=ctx.createImageData(W,H);render();});
+
+/* ================= exports: OBJ/MTL + GLB ================= */
+function dl(name,blob){const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=name;document.body.appendChild(a);a.click();setTimeout(()=>{URL.revokeObjectURL(a.href);a.remove();},400);}
+function buildOBJ(ch){
+  const idx=new Map(); let vi=0; let obj='o '+slugify(ch.name)+'\nmtllib '+slugify(ch.name)+'.mtl\n';
+  const mtl=ch.m.colors.map((c,i)=>
+    `newmtl m${i}\nKd ${c[0].toFixed(3)} ${c[1].toFixed(3)} ${c[2].toFixed(3)}\nKa 0.2 0.2 0.2\nKs 0.25 0.25 0.25\nNs 24\nillum 2`
+  ).join('\n');
+  let cur=-1;
+  ch.m.tris.forEach(t=>{
+    const f=[];
+    t.v.forEach(p=>{
+      const key=p.map(v=>v.toFixed(4)).join(',');
+      let n=idx.get(key);
+      if(n===undefined){n=++vi;idx.set(key,n);obj+='v '+p.map(v=>v.toFixed(4)).join(' ')+'\n';}
+      f.push(n);
+    });
+    if(t.c!==cur){obj+='usemtl m'+t.c+'\n';cur=t.c;}
+    obj+='f '+f[0]+' '+f[1]+' '+f[2]+'\n';
+  });
+  return{obj,mtl};
+}
+const align4=n=>(n+3)&~3;
+function buildGLB(ch){
+  const T=ch.m.tris.length, nV=T*3;
+  const pos=new Float32Array(nV*3),col=new Float32Array(nV*3),ind=new Uint16Array(nV);
+  for(let i=0;i<T;i++){
+    const t=ch.m.tris[i];
+    for(let k=0;k<3;k++){
+      const pp=t.v[k],o=(i*3+k);
+      pos[o*3]=pp[0];pos[o*3+1]=pp[1];pos[o*3+2]=pp[2];
+      col[o*3]=t.c[0];col[o*3+1]=t.c[1];col[o*3+2]=t.c[2];
+      ind[o]=o;
+    }
+  }
+  const poff=0,psize=pos.byteLength,coff=align4(psize),csize=col.byteLength,
+        ioff=align4(coff+csize),isize=ind.byteLength,binLen=align4(ioff+isize);
+  const bin=new ArrayBuffer(binLen);
+  new Uint8Array(bin,poff,psize).set(new Uint8Array(pos.buffer));
+  new Uint8Array(bin,coff,csize).set(new Uint8Array(col.buffer));
+  new Uint8Array(bin,ioff,isize).set(new Uint8Array(ind.buffer));
+  let mn=[1e9,1e9,1e9],mx=[-1e9,-1e9,-1e9];
+  for(let i=0;i<nV*3;i++){const a=pos[i],ax=i%3;(a)&&0;}
+  for(let i=0;i<nV;i++){for(let d=0;d<3;d++){const v=pos[i*3+d];if(v<mn[d])mn[d]=v;if(v>mx[d])mx[d]=v;}}
+  const json={asset:{version:'2.0',generator:'Arcana Squad'},scene:0,
+    scenes:[{nodes:[0]}],nodes:[{mesh:0,name:slugify(ch.name)}],
+    meshes:[{primitives:[{attributes:{POSITION:0,COLOR_0:1},indices:2,material:0,mode:4}]}],
+    materials:[{name:'mat_'+ch.id,pbrMetallicRoughness:{baseColorFactor:[1,1,1,1],metallicFactor:0.1,roughnessFactor:0.85},doubleSided:false}],
+    bufferViews:[
+      {buffer:0,byteOffset:poff,byteLength:psize,target:34962},
+      {buffer:0,byteOffset:coff,byteLength:csize,target:34962},
+      {buffer:0,byteOffset:ioff,byteLength:isize,target:34963}
+    ],
+    accessors:[
+      {bufferView:0,byteOffset:0,componentType:5126,count:nV,type:'VEC3',min:mn,max:mx},
+      {bufferView:1,byteOffset:0,componentType:5126,count:nV,type:'VEC3'},
+      {bufferView:2,byteOffset:0,componentType:5123,count:nV,type:'SCALAR'}
+    ],
+    buffers:[{byteLength:binLen}]};
+  const enc=new TextEncoder().encode(JSON.stringify(json));
+  const jlen=align4(enc.length); const u8=new Uint8Array(binLen).fill(0);
+  const glb=new Uint8Array(20+jlen+8+binLen);
+  const dv=new DataView(glb.buffer);
+  dv.setUint32(0,0x46546C67,true);dv.setUint32(4,2,true);dv.setUint32(8,glb.length,true);
+  dv.setUint32(12,jlen,true);dv.setUint32(16,0x4E4F534A,true);
+  glb.set(enc,20);
+  const o=20+jlen;
+  dv.setUint32(o,binLen,true);dv.setUint32(o+4,0x004E4942,true);
+  glb.set(bin,o+8);
+  return new Blob([glb],{type:'model/gltf-binary'});
+}
+el('dlObj').onclick=()=>{const r=buildOBJ(CHARACTERS[sel]);const n=slugify(CHARACTERS[sel].name);
+  dl(n+'.obj',new Blob([r.obj],{type:'text/plain'}));dl(n+'.mtl',new Blob([r.mtl],{type:'text/plain'}));};
+el('dlGlb').onclick=()=>dl(slugify(CHARACTERS[sel].name)+'.glb',buildGLB(CHARACTERS[sel]));
+
+buildUI();
+</script>
+</body>
+</html>

@@ -126,19 +126,61 @@ export function createHeroMesh(id: HeroId): THREE.Group {
   speciesHead(h.form, head, fur, gold, trim, dark);
   body.add(head);
 
-  const dual = h.weaponKind === "blades";
-  const wpn = new THREE.Group();
-  wpn.position.set(dual ? 0.34 : 0.3, 0.4, 0.12);
-  wpn.rotation.z = -0.22;
-  heroWeapon(h.weaponKind, wpn, gold, trim, dark);
-  body.add(wpn);
-  if (dual) {
-    const left = new THREE.Group();
-    left.position.set(-0.34, 0.4, 0.12);
-    left.rotation.z = 0.22;
-    heroWeapon(h.weaponKind, left, gold, trim, dark);
-    body.add(left);
+  if (id !== "world") {
+    const dual = h.weaponKind === "blades";
+    const wpn = new THREE.Group();
+    wpn.position.set(dual ? 0.34 : 0.3, 0.4, 0.12);
+    wpn.rotation.z = -0.22;
+    heroWeapon(h.weaponKind, wpn, gold, trim, dark);
+    body.add(wpn);
+    if (dual) {
+      const left = new THREE.Group();
+      left.position.set(-0.34, 0.4, 0.12);
+      left.rotation.z = 0.22;
+      heroWeapon(h.weaponKind, left, gold, trim, dark);
+      body.add(left);
+    }
   }
+
+  // Six-Path model sheet details. These only affect the playable Circle heroes;
+  // bosses and the wider Major Arcana roster keep their existing shared rig.
+  if (id === "fool") {
+    add(body, GEO.cone, robe, 0, 1.43, -0.02, 0.29, 0.42, 0.29);
+    for (const [x, y, z] of [[0.54, 1.52, 0.1], [-0.46, 1.62, -0.12], [0.02, 1.92, 0.05]]) {
+      add(body, GEO.octa, trim, x, y, z, 0.09, 0.09, 0.09);
+    }
+    add(body, GEO.octa, gold, 0.34, 1.4, 0.18, 0.13, 0.13, 0.13);
+  } else if (id === "swords") {
+    for (const x of [-0.58, 0.58]) {
+      add(body, GEO.cone, trim, x, 1.08, -0.08, 0.07, 0.55, 0.22, 0, 0, -x * 0.8);
+    }
+  } else if (id === "pentacles") {
+    add(body, GEO.torus, gold, 0, 0.84, 0.23, 0.16, 0.16, 0.05, Math.PI / 2);
+    add(body, GEO.octa, trim, 0, 0.84, 0.28, 0.11, 0.11, 0.04);
+    add(body, GEO.octa, gold, 0.48, 1.1, 0.16, 0.15, 0.15, 0.05);
+  } else if (id === "wands") {
+    const ember = mat(0xff6a20, { emissive: 0xff4010, eInt: 1.25, rough: 0.36 });
+    for (const x of [-0.46, 0.46]) {
+      add(body, GEO.cone, dark, x, 1.0, -0.15, 0.15, 0.72, 0.28, 0.08, 0, -x * 0.85);
+    }
+    add(body, GEO.sphere, ember, -0.57, 1.32, 0.1, 0.13, 0.18, 0.13);
+    add(body, GEO.cone, gold, -0.57, 1.47, 0.1, 0.08, 0.24, 0.08);
+  } else if (id === "cups") {
+    const shell = mat(0x5b8a53, { rough: 0.68, metal: 0.22 });
+    add(body, GEO.sphere, shell, 0, 0.86, -0.27, 0.42, 0.3, 0.25);
+    add(body, GEO.torus, gold, 0, 0.86, -0.49, 0.28, 0.28, 0.055, Math.PI / 2);
+    add(body, GEO.octa, trim, 0.33, 1.08, 0.25, 0.1, 0.14, 0.08);
+  } else if (id === "world") {
+    const wing = mat(0x2c6a35, { rough: 0.5, metal: 0.15, emissive: 0x15391d, eInt: 0.34 });
+    for (const x of [-0.54, 0.54]) {
+      add(body, GEO.cone, wing, x, 1.02, -0.16, 0.14, 0.88, 0.3, 0.12, 0, -x * 0.82);
+    }
+    add(body, GEO.cyl, gold, 0.42, 0.88, 0.16, 0.045, 1.55, 0.045);
+    add(body, GEO.sphere, robe, 0.42, 1.74, 0.16, 0.15, 0.15, 0.15);
+    add(body, GEO.sphere, wing, 0.42, 1.48, 0.16, 0.15, 0.15, 0.15);
+    add(body, GEO.octa, gold, 0.42, 1.74, 0.16, 0.08, 0.08, 0.08);
+  }
+
   g.add(body);
 
   const muzzle = new THREE.Object3D();

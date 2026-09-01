@@ -133,9 +133,6 @@ export type HudSnap = {
   pips: number;
   pipsMax: number;
   resonance: string;
-  level: number;
-  xp: number;
-  xpNeed: number;
 };
 
 export type ControlsProbe = {
