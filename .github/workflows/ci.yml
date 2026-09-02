@@ -1,0 +1,129 @@
+name: Arcana Squad CI
+
+on:
+  push:
+    branches:
+      - main
+      - docs/arcana-card-system
+  pull_request:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_DB: arcana_ci
+          POSTGRES_HOST_AUTH_METHOD: trust
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d arcana_ci"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      CI: true
+      DATABASE_URL: postgresql://postgres@127.0.0.1:5432/arcana_ci
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build, generate routes, and apply migrations
+        run: npm run build
+
+      - name: Verify Arcana migration
+        run: |
+          node --input-type=module <<'NODE'
+          import pg from "pg";
+
+          const expectedTables = [
+            "arcana_profiles",
+            "arcana_card_unlocks",
+            "arcana_deck_cards",
+            "guardian_progress",
+            "arcana_achievements",
+          ];
+          const client = new pg.Client({ connectionString: process.env.DATABASE_URL });
+          await client.connect();
+          try {
+            const migration = await client.query(
+              "select name from _migrations where name = $1",
+              ["0003_arcana_progression.sql"],
+            );
+            if (migration.rowCount !== 1) {
+              throw new Error("0003_arcana_progression.sql was not recorded in _migrations");
+            }
+
+            const tables = await client.query(
+              "select table_name from information_schema.tables where table_schema = 'public' and table_name = any($1::text[])",
+              [expectedTables],
+            );
+            const present = new Set(tables.rows.map((row) => row.table_name));
+            const missing = expectedTables.filter((name) => !present.has(name));
+            if (missing.length) {
+              throw new Error(`Arcana migration is missing tables: ${missing.join(", ")}`);
+            }
+          } finally {
+            await client.end();
+          }
+          NODE
+
+      - name: Typecheck generated route tree
+        run: npm run typecheck
+
+      - name: Test
+        run: npm test
+
+      - name: Smoke test Arcana routes
+        run: |
+          npm run preview -- --host 127.0.0.1 --port 4173 > /tmp/arcana-preview.log 2>&1 &
+          PREVIEW_PID=$!
+          cleanup() {
+            kill "$PREVIEW_PID" 2>/dev/null || true
+            wait "$PREVIEW_PID" 2>/dev/null || true
+            cat /tmp/arcana-preview.log
+          }
+          trap cleanup EXIT
+
+          READY=0
+          for attempt in $(seq 1 30); do
+            if curl -fsS http://127.0.0.1:4173/ -o /tmp/arcana-home.html; then
+              READY=1
+              break
+            fi
+            sleep 1
+          done
+          if [ "$READY" -ne 1 ]; then
+            echo "Preview server did not become ready"
+            exit 1
+          fi
+
+          for route in / /squad /cards /play /grimoire; do
+            STATUS=$(curl -sS -o /tmp/arcana-route.html -w '%{http_code}' "http://127.0.0.1:4173${route}")
+            if [ "$STATUS" != "200" ]; then
+              echo "${route} returned HTTP ${STATUS}"
+              exit 1
+            fi
+            if [ ! -s /tmp/arcana-route.html ]; then
+              echo "${route} returned an empty response"
+              exit 1
+            fi
+          done

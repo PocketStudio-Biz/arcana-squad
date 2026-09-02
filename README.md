@@ -11,6 +11,22 @@ Isometric tarot dungeon crawler. Pick a Major Arcana or Circle hero, auto-aim ta
 
 Touch-first. Works on phones, tablets, and desktop. Add to Home Screen as a PWA.
 
+## Product architecture
+
+The current proposed guardian mapping, tarot card system, website architecture, and game app flow are documented in [`docs/ARCANA_CARD_SYSTEM.md`](docs/ARCANA_CARD_SYSTEM.md).
+
+That document covers:
+
+- Turtle / Swords
+- Otter / Pentacles
+- Lizard / Wands
+- Raven / Cups
+- Lynx / Major Arcana
+- World Gate, Squad Codex, Card Archive, Play, and Player Grimoire
+- the draw → encounter → squad interaction → reading → evolution loop
+- shared card and guardian data-model recommendations
+- implementation guardrails and open design decisions
+
 ## Stack
 
 TanStack Start · Three.js · Tailwind · Postgres (Neon / PGLite fallback)
